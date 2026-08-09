@@ -86,3 +86,24 @@ POST /analyze
 ```
 
 請把 `.env`、AWS credentials、OpenAI API key 或 Bedrock credentials 加入 `.gitignore`。
+
+## 雲端部署給組員使用
+
+最簡單的方式是部署到 Render，因為本專案是 Node.js server，且需要在後端保存 `OPENAI_API_KEY`。
+
+1. 到 Render 建立帳號並連接 GitHub。
+2. 選擇 `xu3934/reguflow-mvp` repository。
+3. 建立 Web Service。
+4. Render 會讀取 `render.yaml`，使用：
+   - Build command: `npm install`
+   - Start command: `npm start`
+5. 在 Render 的 Environment Variables 設定：
+
+```text
+OPENAI_API_KEY=你的 OpenAI API key
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+部署成功後，Render 會給一個公開網址。組員只要打開該網址即可使用，不需要 clone repo，也不需要知道你的 API key。
+
+注意：雲端部署後，所有組員的 API 使用量會算在你設定的 `OPENAI_API_KEY` 上，建議在 OpenAI Billing 設定用量上限。
