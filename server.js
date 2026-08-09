@@ -170,7 +170,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, report);
     }
 
-    if (req.method !== "GET") {
+    if (req.method !== "GET" && req.method !== "HEAD") {
       return sendText(res, 405, "Method not allowed");
     }
 
@@ -179,6 +179,7 @@ const server = http.createServer(async (req, res) => {
 
     const ext = path.extname(filePath);
     res.writeHead(200, { "Content-Type": mimeTypes[ext] || "application/octet-stream" });
+    if (req.method === "HEAD") return res.end();
     fs.createReadStream(filePath).pipe(res);
   } catch (error) {
     sendJson(res, 500, {
