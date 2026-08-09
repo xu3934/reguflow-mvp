@@ -1,0 +1,10 @@
+{
+  "name": "reguflow-mvp",
+  "version": "0.2.0",
+  "private": true,
+  "description": "ReguFlow MVP with optional OpenAI API backend and local fallback.",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check app.js && node --check server.js"
+  }
+}

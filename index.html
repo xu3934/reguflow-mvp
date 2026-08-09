@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ReguFlow MVP - 醫藥法規自動化檢索系統</title>
+    <meta
+      name="description"
+      content="ReguFlow MVP: fact extraction, hybrid retrieval, applicability assessment, and official source traceability."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workspace">
+        <aside class="sidebar" aria-label="ReguFlow pipeline">
+          <div class="brand-block">
+            <div class="brand-mark">R</div>
+            <div>
+              <p class="eyebrow">ReguFlow MVP</p>
+              <h1>醫藥法規自動化檢索系統</h1>
+            </div>
+          </div>
+
+          <div class="pipeline-card">
+            <p class="section-label">Retrieval Pipeline</p>
+            <ol class="pipeline-list">
+              <li class="active" data-step="1">抽取法律事實</li>
+              <li data-step="2">混合檢索候選法規</li>
+              <li data-step="3">判斷適用性與缺漏事實</li>
+              <li data-step="4">產出可追溯報告</li>
+            </ol>
+          </div>
+
+          <div class="source-card">
+            <p class="section-label">這版改善什麼</p>
+            <p>
+              不讓 AI 直接背法條，而是先把情境轉成結構化法律事實，再用法規索引、
+              關鍵字、主題、母法子法關係做檢索，最後才產出有來源的判斷。
+            </p>
+          </div>
+        </aside>
+
+        <section class="main-panel">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">Regulatory Intelligence Copilot</p>
+              <h2>從情境到法條，逐步建立可審查的判斷鏈</h2>
+            </div>
+            <button class="ghost-button" id="loadDemo" type="button">載入 Demo Case</button>
+          </header>
+
+          <section class="input-section" aria-labelledby="input-title">
+            <div class="section-header">
+              <div>
+                <p class="section-label">Request</p>
+                <h3 id="input-title">PM / BD 情境輸入</h3>
+              </div>
+              <span class="status-pill" id="modeBadge">Checking API...</span>
+            </div>
+            <div class="api-status" id="apiStatus">
+              正在檢查目前是否連上後端 AI API。
+            </div>
+            <div class="status-legend" aria-label="API status legend">
+              <div><span class="legend-dot api-on"></span><strong>OpenAI API ready</strong> 有偵測到 key，下一次分析會用 API</div>
+              <div><span class="legend-dot api-off"></span><strong>Local fallback</strong> 沒有 key，不會收費</div>
+              <div><span class="legend-dot api-error"></span><strong>AI failed - local fallback</strong> 有 key 但 API 呼叫失敗，已自動備援</div>
+            </div>
+
+            <label class="input-label" for="scenario">請描述要引入的新藥、療法或產品情境</label>
+            <textarea
+              id="scenario"
+              rows="5"
+              placeholder="例如：我想引入細胞製劑，用於癌症病人的再生醫療治療，需要符合哪些台灣法規？"
+            ></textarea>
+
+            <div class="form-grid">
+              <label>
+                目標市場
+                <select id="market">
+                  <option value="tw">台灣</option>
+                </select>
+              </label>
+              <label>
+                產品類型
+                <select id="productType">
+                  <option value="auto">自動判斷</option>
+                  <option value="cell">細胞製劑 / 再生醫療製劑</option>
+                  <option value="drug">新藥 / 藥品</option>
+                  <option value="device">醫材</option>
+                </select>
+              </label>
+              <label>
+                Demo 模式
+                <select id="demoMode">
+                  <option value="grounded">檢索與適用性判斷</option>
+                  <option value="fallback">強制使用 Golden Report</option>
+                </select>
+              </label>
+            </div>
+
+            <button class="primary-button" id="analyze" type="button">
+              開始檢索與生成報告
+            </button>
+          </section>
+
+          <section class="progress-section hidden" id="progressSection" aria-live="polite">
+            <div class="progress-track">
+              <span id="progressBar"></span>
+            </div>
+            <p id="progressText">正在抽取法律事實...</p>
+          </section>
+
+          <section class="results-grid hidden" id="results">
+            <article class="report-card primary-report">
+              <div class="section-header">
+                <div>
+                  <p class="section-label">Report</p>
+                  <h3>法規適用性報告</h3>
+                </div>
+                <span class="score-badge" id="confidenceScore">--</span>
+              </div>
+              <div id="reportSummary" class="summary-copy"></div>
+            </article>
+
+            <article class="report-card">
+              <p class="section-label">Extracted Facts</p>
+              <h3>法律事實抽取</h3>
+              <div id="factsPanel" class="fact-grid"></div>
+            </article>
+
+            <article class="report-card wide-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-label">Candidate Ranking</p>
+                  <h3>候選法規檢索排序</h3>
+                </div>
+              </div>
+              <div id="candidateList" class="candidate-list"></div>
+            </article>
+
+            <article class="report-card wide-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-label">Applicability</p>
+                  <h3>適用性判斷與缺漏事實</h3>
+                </div>
+              </div>
+              <div id="assessmentList" class="assessment-list"></div>
+            </article>
+
+            <article class="report-card wide-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-label">Traceability</p>
+                  <h3>結論 - 官方來源對照表</h3>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>結論</th>
+                      <th>官方來源</th>
+                      <th>適用性</th>
+                      <th>信心</th>
+                    </tr>
+                  </thead>
+                  <tbody id="traceRows"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="report-card wide-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-label">Mermaid.js</p>
+                  <h3>法規檢索與準備流程圖</h3>
+                </div>
+                <button class="ghost-button small" id="copyMermaid" type="button">複製 Mermaid</button>
+              </div>
+              <div class="mermaid-shell">
+                <pre class="mermaid" id="mermaidDiagram"></pre>
+              </div>
+              <details>
+                <summary>查看 Mermaid 原始碼</summary>
+                <pre id="mermaidSource" class="code-block"></pre>
+              </details>
+            </article>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
