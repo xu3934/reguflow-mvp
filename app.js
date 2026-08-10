@@ -461,33 +461,8 @@ function renderReport(report) {
     <ul>${report.summary_and_checklist.missing_facts.map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>目前沒有明顯缺漏，但仍需 RA / Legal 複核。</li>"}</ul>
   `;
 
-  document.querySelector("#factsPanel").innerHTML = renderFacts(report.facts);
-  document.querySelector("#candidateList").innerHTML = report.candidates.map(renderCandidate).join("");
   document.querySelector("#processStages").innerHTML = report.process_stages.map(renderStage).join("");
   document.querySelector("#traceRows").innerHTML = report.traceability.map(renderTraceRow).join("");
-}
-
-function renderFacts(facts) {
-  return [
-    ["目標市場", facts.jurisdiction],
-    ["角色定位", facts.role],
-    ["產品類型", facts.productTypeLabel || translateProductType(facts.productType)],
-    ["法規類型", facts.lawTypes.join("、")],
-    ["情境活動", facts.activities.join("、")],
-  ]
-    .map(([label, value]) => `<div class="fact-item"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`)
-    .join("");
-}
-
-function renderCandidate(candidate) {
-  return `<div class="candidate-item">
-    <div>
-      <p class="law-title">${escapeHtml(candidate.law.title)}</p>
-      <p>${escapeHtml(candidate.law.level)} · ${escapeHtml(candidate.law.pcode)}</p>
-    </div>
-    <div class="candidate-score" title="檢索匹配分數">${candidate.score}</div>
-    <div class="reason-list">${candidate.reasons.map((reason) => `<span>${escapeHtml(reason)}</span>`).join("")}</div>
-  </div>`;
 }
 
 function renderStage(stage) {
