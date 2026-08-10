@@ -2,11 +2,11 @@
 
 ReguFlow 是一個醫藥法規自動化檢索系統 MVP。此版本根據 PRD 的核心流程，做成可直接開啟的本地 Web prototype：
 
-- PM / BD 輸入新藥或細胞製劑引入情境
+- PM / BD 輸入角色定位、產品類型、法規類型與引入情境
 - 系統判斷母法與 PCode
 - 追蹤授權子法
-- 產出合規缺口、下一步 action plan、官方來源 traceability table
-- 產生 Mermaid.js 法規準備流程圖
+- 產出法規適用性報告、白話重點、Checklist、官方來源 traceability table
+- 產生三階段 SaaS 卡片式流程圖
 
 ## 如何執行
 
@@ -26,6 +26,7 @@ PRD 原本設計為 Streamlit + FastAPI + Bedrock + 法務部爬蟲。本 MVP �
 2. 法務部爬蟲先用內建法規索引模擬，保留官方 PCode URL。
 3. AI pipeline 先用 deterministic analyzer + golden fallback，之後可替換成 LLM structured output。
 4. 檢索邏輯改成「法律事實抽取 -> 候選法規排序 -> 適用性判斷 -> traceability」，避免單純讓 AI 模型憑記憶搜尋法條。
+5. V2 改成角色導向輸出：左欄法規條文與來源、右欄白話重點與 Checklist、下欄三階段流程卡片。
 
 ## 目前是否需要 AI API
 
@@ -39,6 +40,21 @@ PRD 原本設計為 Streamlit + FastAPI + Bedrock + 法務部爬蟲。本 MVP �
 - `extractFacts(scenario, selectedType)`：把使用者情境轉成產品類型、活動、管轄地、風險關鍵字、缺漏事實。
 - `retrieveCandidateLaws(facts)`：用產品類型、活動、主題、母子法關係排序候選法規。
 - `assessApplicability(facts, candidates)`：判斷 likely / possible / needs more information，並列出缺漏事實。
+
+V2 後端端點：
+
+```text
+POST /api/v1/analyze
+```
+
+輸出包含：
+
+```text
+applicable_laws
+summary_and_checklist
+process_stages
+traceability
+```
 
 ## 啟動 AI API 模式
 

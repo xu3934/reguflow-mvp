@@ -12,137 +12,143 @@ const LAW_INDEX = [
   {
     id: "regen-act",
     pcode: "L0030142",
-    level: "mother",
+    level: "母法",
     title: "再生醫療製劑條例",
     url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030142",
-    jurisdiction: "台灣",
-    productTypes: ["cell", "drug"],
-    activities: ["上市", "輸入", "製造", "治療使用", "查驗登記"],
-    topics: ["再生醫療", "細胞製劑", "基因治療", "組織工程", "上市後管理"],
-    article: "母法",
-    text:
-      "規範再生醫療製劑之研發、製造、查驗登記、輸入、上市後管理及相關事項，並授權中央主管機關訂定相關管理辦法。",
-    authorizedSubLawIds: ["regen-source", "regen-manufacturing", "regen-review"],
-  },
-  {
-    id: "regen-source",
-    pcode: "L0030146",
-    level: "sub",
-    parentId: "regen-act",
-    title: "再生醫療製劑供應來源及流向資料保存辦法",
-    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030146",
-    jurisdiction: "台灣",
-    productTypes: ["cell", "drug"],
-    activities: ["上市後管理", "供應", "紀錄保存", "追蹤"],
-    topics: ["供應來源", "流向資料", "保存期限", "稽核", "上市後追蹤"],
-    article: "授權子法",
-    text:
-      "要求再生醫療製劑相關供應來源、流向資料、保存期限與紀錄管理，以支援上市後追蹤與稽核。",
-  },
-  {
-    id: "regen-manufacturing",
-    pcode: "L0030147",
-    level: "sub",
-    parentId: "regen-act",
-    title: "再生醫療製劑製造及品質管理辦法",
-    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030147",
-    jurisdiction: "台灣",
-    productTypes: ["cell", "drug"],
-    activities: ["製造", "品質管理", "放行", "變更管理"],
-    topics: ["GMP", "製造場所", "批次紀錄", "品質系統", "放行標準"],
-    article: "授權子法",
-    text:
-      "規範再生醫療製劑製造場所、品質系統、批次紀錄、放行標準與變更管理要求。",
+    productTypes: ["cell_therapy", "prescription_drug"],
+    roles: ["進口代理商", "研發藥廠", "代工藥廠"],
+    lawTypes: ["查驗登記", "生產 GMP", "供應來源與流向"],
+    activities: ["引入", "輸入", "上市", "治療", "製造", "查驗登記"],
+    article: "第5條",
+    articleText:
+      "再生醫療製劑之販賣業者及製造業者，為藥事法所稱之藥品販賣業者及藥品製造業者；製造業者應配置專任藥師與具細胞學、微生物學或免疫學專門知識之專任人員。",
+    plain:
+      "如果要在台灣引入或製造細胞、基因等再生醫療製劑，業者身分、藥師監製與專業人員配置都要先確認。",
+    checklist: ["確認業者身分與許可", "確認是否需要專任藥師監製", "確認細胞學或免疫學專任人員配置"],
   },
   {
     id: "regen-review",
     pcode: "L0030148",
-    level: "sub",
+    level: "授權子法",
     parentId: "regen-act",
     title: "再生醫療製劑查驗登記審查辦法",
     url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030148",
-    jurisdiction: "台灣",
-    productTypes: ["cell", "drug"],
-    activities: ["查驗登記", "上市", "審查"],
-    topics: ["品質資料", "非臨床", "臨床試驗", "風險管理", "審查資料"],
-    article: "授權子法",
-    text:
-      "規範申請查驗登記時應檢附之品質、非臨床、臨床與風險管理資料。",
+    productTypes: ["cell_therapy", "prescription_drug"],
+    roles: ["進口代理商", "研發藥廠"],
+    lawTypes: ["查驗登記"],
+    activities: ["上市", "查驗登記", "審查"],
+    article: "查驗登記資料",
+    articleText:
+      "申請查驗登記時，應檢附品質、非臨床、臨床與風險管理等資料，以供主管機關審查。",
+    plain:
+      "上市前不能只說產品有效，還要準備完整的品質、非臨床、臨床和風險管理資料包。",
+    checklist: ["整理品質資料", "整理非臨床資料", "整理臨床資料", "建立風險管理摘要"],
   },
   {
-    id: "pharma-act",
+    id: "regen-source",
+    pcode: "L0030146",
+    level: "授權子法",
+    parentId: "regen-act",
+    title: "再生醫療製劑供應來源及流向資料保存辦法",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030146",
+    productTypes: ["cell_therapy"],
+    roles: ["進口代理商", "供應鏈物流", "研發藥廠"],
+    lawTypes: ["供應來源與流向", "運輸 GDP"],
+    activities: ["供應", "物流", "流向", "保存", "追蹤"],
+    article: "供應來源與流向資料",
+    articleText:
+      "再生醫療製劑相關供應來源、流向資料、保存期限與紀錄管理，應足以支援上市後追蹤與稽核。",
+    plain:
+      "代理商和物流角色要能說清楚產品從哪裡來、送到哪裡、資料保存多久，以及出問題時如何追溯。",
+    checklist: ["建立供應來源紀錄", "建立流向紀錄", "確認資料保存期限", "定義召回與追蹤流程"],
+  },
+  {
+    id: "regen-gmp",
+    pcode: "L0030147",
+    level: "授權子法",
+    parentId: "regen-act",
+    title: "再生醫療製劑製造及品質管理辦法",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030147",
+    productTypes: ["cell_therapy"],
+    roles: ["代工藥廠", "研發藥廠", "進口代理商"],
+    lawTypes: ["生產 GMP"],
+    activities: ["製造", "品質", "批次", "放行", "GMP"],
+    article: "製造與品質管理",
+    articleText:
+      "再生醫療製劑製造場所、品質系統、批次紀錄、放行標準與變更管理應符合主管機關要求。",
+    plain:
+      "若產品涉及在地製造或委託製造，需要確認工廠、批次紀錄、放行標準和品質系統是否完整。",
+    checklist: ["確認製造場所資格", "建立批次紀錄", "確認放行標準", "建立變更管理流程"],
+  },
+  {
+    id: "drug-act",
     pcode: "L0030001",
-    level: "mother",
+    level: "母法",
     title: "藥事法",
     url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030001",
-    jurisdiction: "台灣",
-    productTypes: ["drug"],
+    productTypes: ["prescription_drug", "otc_drug", "general_drug", "cell_therapy"],
+    roles: ["進口代理商", "研發藥廠", "代工藥廠", "原料藥廠"],
+    lawTypes: ["查驗登記", "生產 GMP", "運輸 GDP"],
     activities: ["製造", "輸入", "販賣", "上市", "查驗登記"],
-    topics: ["新藥", "藥品", "藥證", "品質", "安全性", "有效性"],
-    article: "母法",
-    text:
-      "藥品之製造、輸入、販賣與查驗登記應符合主管機關規範；新藥上市前需提出品質、安全性及有效性資料。",
-    authorizedSubLawIds: ["drug-registration", "gmp"],
+    article: "藥品管理原則",
+    articleText:
+      "藥品之製造、輸入、販賣與查驗登記應符合主管機關規範；上市前需提出品質、安全性及有效性資料。",
+    plain:
+      "只要是藥品的製造、輸入或販賣，就要回到藥事法確認業者資格、查驗登記和品質安全有效性要求。",
+    checklist: ["確認藥商資格", "確認輸入或製造許可", "盤點品質安全有效性資料"],
   },
   {
     id: "drug-registration",
     pcode: "L0030057",
-    level: "sub",
-    parentId: "pharma-act",
+    level: "授權子法",
+    parentId: "drug-act",
     title: "藥品查驗登記審查準則",
     url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030057",
-    jurisdiction: "台灣",
-    productTypes: ["drug"],
-    activities: ["查驗登記", "上市", "審查"],
-    topics: ["行政資料", "品質資料", "藥理毒理", "臨床試驗", "仿單"],
-    article: "授權子法",
-    text:
+    productTypes: ["prescription_drug", "otc_drug", "general_drug"],
+    roles: ["進口代理商", "研發藥廠"],
+    lawTypes: ["查驗登記"],
+    activities: ["上市", "查驗登記", "審查"],
+    article: "送審資料",
+    articleText:
       "藥品申請查驗登記應依品項檢附行政、品質、藥理毒理、臨床試驗與標示仿單資料。",
+    plain:
+      "藥品上市前要把送審資料分門別類準備好，尤其是品質、藥理毒理、臨床和仿單。",
+    checklist: ["準備行政資料", "準備品質資料", "準備藥理毒理資料", "準備仿單與標示"],
   },
   {
     id: "gmp",
     pcode: "L0030074",
-    level: "sub",
-    parentId: "pharma-act",
+    level: "授權子法",
+    parentId: "drug-act",
     title: "藥物優良製造準則",
     url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030074",
-    jurisdiction: "台灣",
-    productTypes: ["drug"],
-    activities: ["製造", "品質管理"],
-    topics: ["GMP", "廠房", "設備", "文件", "製程", "品質管制"],
-    article: "授權子法",
-    text:
+    productTypes: ["prescription_drug", "otc_drug", "general_drug", "cell_therapy"],
+    roles: ["代工藥廠", "原料藥廠", "研發藥廠"],
+    lawTypes: ["生產 GMP"],
+    activities: ["製造", "品質", "GMP", "原料"],
+    article: "GMP",
+    articleText:
       "藥品製造與品質管理需符合 GMP，涵蓋人員、廠房、設備、文件、製程與品質管制。",
+    plain:
+      "只要涉及生產或委託製造，就要檢查 GMP：人員、廠房、設備、文件和品質管制都不能缺。",
+    checklist: ["確認 GMP 符合性", "檢查廠房與設備", "檢查製程文件", "確認品質管制紀錄"],
   },
   {
-    id: "device-act",
-    pcode: "L0030106",
-    level: "mother",
-    title: "醫療器材管理法",
-    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030106",
-    jurisdiction: "台灣",
-    productTypes: ["device"],
-    activities: ["上市", "輸入", "製造", "查驗登記"],
-    topics: ["醫療器材", "分類分級", "安全", "效能", "品質系統", "軟體醫材"],
-    article: "母法",
-    text:
-      "醫療器材上市前應依風險等級完成分類分級、品質管理與查驗登記或登錄。",
-    authorizedSubLawIds: ["device-registration"],
-  },
-  {
-    id: "device-registration",
-    pcode: "L0030110",
-    level: "sub",
-    parentId: "device-act",
-    title: "醫療器材查驗登記審查準則",
-    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030110",
-    jurisdiction: "台灣",
-    productTypes: ["device"],
-    activities: ["查驗登記", "上市", "審查"],
-    topics: ["分類分級", "安全性", "效能", "臨床評估", "軟體驗證"],
-    article: "授權子法",
-    text:
-      "醫療器材上市前需依分類分級提交安全、效能、品質與必要臨床評估資料。",
+    id: "gdp",
+    pcode: "TFDA-GDP",
+    level: "實務規範",
+    title: "藥品優良運銷規範 GDP",
+    url: "https://www.fda.gov.tw/",
+    productTypes: ["prescription_drug", "otc_drug", "general_drug", "cell_therapy"],
+    roles: ["進口代理商", "供應鏈物流"],
+    lawTypes: ["運輸 GDP"],
+    activities: ["運輸", "物流", "倉儲", "配送", "冷鏈"],
+    article: "GDP",
+    articleText:
+      "藥品運銷應確保儲存、運輸、配送與追溯過程維持品質，包含溫控、紀錄、委外管理與異常處理。",
+    plain:
+      "代理商和物流團隊要證明運輸過程不破壞品質，尤其是冷鏈、溫度紀錄、委外物流和異常處理。",
+    checklist: ["確認倉儲與運輸條件", "建立溫度紀錄", "確認委外物流責任", "建立異常與召回流程"],
   },
 ];
 
@@ -164,7 +170,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    if (req.method === "POST" && url.pathname === "/api/analyze") {
+    if (req.method === "POST" && (url.pathname === "/api/v1/analyze" || url.pathname === "/api/analyze")) {
       const payload = await readJson(req);
       const report = await analyzeWithOptionalAi(payload);
       return sendJson(res, 200, report);
@@ -176,16 +182,12 @@ const server = http.createServer(async (req, res) => {
 
     const filePath = safeStaticPath(url.pathname);
     if (!filePath) return sendText(res, 404, "Not found");
-
     const ext = path.extname(filePath);
     res.writeHead(200, { "Content-Type": mimeTypes[ext] || "application/octet-stream" });
     if (req.method === "HEAD") return res.end();
     fs.createReadStream(filePath).pipe(res);
   } catch (error) {
-    sendJson(res, 500, {
-      error: "server_error",
-      message: error.message,
-    });
+    sendJson(res, 500, { error: "server_error", message: error.message });
   }
 });
 
@@ -195,89 +197,64 @@ server.listen(PORT, () => {
 });
 
 async function analyzeWithOptionalAi(payload) {
-  const scenario = String(payload.scenario || "").trim();
-  const selectedType = payload.selectedType || "auto";
-  const localFacts = extractFacts(scenario, selectedType);
-
-  if (!OPENAI_API_KEY) {
-    return buildReport(localFacts, "local_fallback");
-  }
+  const localReport = buildReport(extractFacts(payload), "local_fallback");
+  if (!OPENAI_API_KEY) return localReport;
 
   try {
-    const aiFacts = await extractFactsWithOpenAI(scenario, selectedType, localFacts);
-    const normalizedFacts = normalizeFacts(aiFacts, localFacts, scenario);
-    const candidates = retrieveCandidateLaws(normalizedFacts);
-    const aiAssessments = await assessApplicabilityWithOpenAI(normalizedFacts, candidates.slice(0, 6));
-    return buildReport(normalizedFacts, "openai", aiAssessments);
+    const aiResult = await generateRoleBriefWithOpenAI(payload, localReport);
+    return {
+      ...localReport,
+      mode: "openai",
+      model: OPENAI_MODEL,
+      summary_and_checklist: normalizeSummary(aiResult.summary_and_checklist, localReport.summary_and_checklist),
+      process_stages: normalizeStages(aiResult.process_stages, localReport.process_stages),
+    };
   } catch (error) {
-    const report = buildReport(localFacts, "ai_failed_fallback");
-    report.aiError = error.message;
-    return report;
+    return { ...localReport, mode: "ai_failed_fallback", aiError: error.message };
   }
 }
 
-async function extractFactsWithOpenAI(scenario, selectedType, localFacts) {
-  const prompt = `User scenario:
-${scenario}
+async function generateRoleBriefWithOpenAI(payload, report) {
+  const prompt = `Input:
+${JSON.stringify(payload, null, 2)}
 
-Selected product type: ${selectedType}
-Local fallback facts:
-${JSON.stringify(localFacts, null, 2)}
+Retrieved laws:
+${JSON.stringify(report.applicable_laws, null, 2)}
 
-Return only JSON:
+Local draft:
+${JSON.stringify(
+  {
+    summary_and_checklist: report.summary_and_checklist,
+    process_stages: report.process_stages,
+  },
+  null,
+  2
+)}
+
+Return strict JSON only:
 {
-  "jurisdiction": "台灣",
-  "productType": "cell" | "drug" | "device",
-  "activities": string[],
-  "riskKeywords": string[],
-  "missingFacts": string[]
-}`;
-
-  const text = await callOpenAI({
-    instructions:
-      "You extract structured regulatory facts for Taiwan pharma/medical product scenarios. Do not identify laws. Do not invent legal citations. Return strict JSON only.",
-    input: prompt,
-  });
-  return parseJsonObject(text);
-}
-
-async function assessApplicabilityWithOpenAI(facts, candidates) {
-  const compactCandidates = candidates.map(({ law, score, reasons }) => ({
-    id: law.id,
-    title: law.title,
-    pcode: law.pcode,
-    level: law.level,
-    article: law.article,
-    text: law.text,
-    score,
-    retrievalReasons: reasons,
-  }));
-
-  const prompt = `Structured facts:
-${JSON.stringify(facts, null, 2)}
-
-Retrieved candidate laws:
-${JSON.stringify(compactCandidates, null, 2)}
-
-Assess only these retrieved laws. Return only JSON:
-{
-  "assessments": [
+  "summary_and_checklist": {
+    "role": string,
+    "summary_points": string[],
+    "checklist": string[],
+    "missing_facts": string[]
+  },
+  "process_stages": [
     {
-      "lawId": string,
-      "applicability": "likely_applicable" | "potentially_applicable" | "needs_more_information",
-      "confidence": number,
-      "reason": string,
-      "missingFacts": string[]
+      "stage_title": string,
+      "law_name": string,
+      "control_points": string[],
+      "owner": string
     }
   ]
 }`;
 
   const text = await callOpenAI({
     instructions:
-      "You are a regulatory applicability reviewer. You may only assess the provided candidate laws. Never add laws not in the candidate list. Return strict JSON only.",
+      "You write Taiwan pharma regulatory summaries for BD, PM, RA, QA and logistics users. Use only the retrieved laws. Do not invent laws or citations. Return strict JSON only.",
     input: prompt,
   });
-  return parseJsonObject(text).assessments || [];
+  return parseJsonObject(text);
 }
 
 async function callOpenAI({ instructions, input }) {
@@ -287,135 +264,105 @@ async function callOpenAI({ instructions, input }) {
       Authorization: `Bearer ${OPENAI_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      instructions,
-      input,
-      temperature: 0,
-    }),
+    body: JSON.stringify({ model: OPENAI_MODEL, instructions, input, temperature: 0 }),
   });
-
   const json = await response.json();
-  if (!response.ok) {
-    throw new Error(json.error?.message || `OpenAI request failed: ${response.status}`);
-  }
-
+  if (!response.ok) throw new Error(json.error?.message || `OpenAI request failed: ${response.status}`);
   return extractOutputText(json);
 }
 
-function buildReport(facts, mode, aiAssessments = null) {
+function buildReport(facts, mode) {
   const candidates = retrieveCandidateLaws(facts);
-  const assessments = mergeAssessments(facts, candidates, aiAssessments).slice(0, 5);
-  const gaps = buildGaps(facts, assessments);
-  const actions = buildActions(facts, assessments);
-
+  const assessments = assessApplicability(facts, candidates).slice(0, 6);
   return {
     mode,
     model: mode === "openai" ? OPENAI_MODEL : null,
     analyzedAt: new Date().toISOString(),
     facts,
-    candidates: candidates.slice(0, 6),
+    candidates: candidates.slice(0, 7),
     assessments,
     confidence: calculateOverallConfidence(assessments),
-    gaps,
-    actions,
-    mermaid: buildMermaid(facts, assessments),
+    applicable_laws: buildApplicableLaws(assessments),
+    summary_and_checklist: buildSummaryChecklist(facts, assessments),
+    process_stages: buildProcessStages(facts, assessments),
     traceability: buildTraceability(assessments),
   };
 }
 
-function mergeAssessments(facts, candidates, aiAssessments) {
-  const local = assessApplicability(facts, candidates);
-  if (!Array.isArray(aiAssessments)) return local;
-
-  const byId = new Map(aiAssessments.map((item) => [item.lawId, item]));
-  return local.map((assessment) => {
-    const ai = byId.get(assessment.law.id);
-    if (!ai) return assessment;
-    return {
-      ...assessment,
-      applicability: ai.applicability || assessment.applicability,
-      confidence:
-        typeof ai.confidence === "number"
-          ? Math.max(0, Math.min(0.95, ai.confidence))
-          : assessment.confidence,
-      missingFacts: Array.isArray(ai.missingFacts) ? ai.missingFacts : assessment.missingFacts,
-      conclusion: `${translateApplicability(ai.applicability || assessment.applicability)}: ${assessment.law.title} (${assessment.law.pcode}) - ${ai.reason || assessment.conclusion}`,
-    };
-  });
-}
-
-function extractFacts(scenario, selectedType) {
-  const text = scenario.toLowerCase();
+function extractFacts(payload) {
+  const text = `${payload.user_intent || payload.scenario || ""}`.toLowerCase();
+  const selectedType = payload.product_type || payload.selectedType || "auto";
   const productType =
     selectedType !== "auto"
       ? selectedType
-      : matchAny(text, ["細胞", "再生醫療", "基因治療", "組織工程"])
-        ? "cell"
-        : matchAny(text, ["醫材", "醫療器材", "軟體醫材", "samd", "ai醫材"])
-          ? "device"
-          : "drug";
+      : matchAny(text, ["細胞", "再生醫療", "基因", "cell"])
+        ? "cell_therapy"
+        : matchAny(text, ["指示藥", "otc"])
+          ? "otc_drug"
+          : matchAny(text, ["成藥"])
+            ? "general_drug"
+            : "prescription_drug";
 
   const activities = [];
-  addIf(activities, "輸入", matchAny(text, ["引入", "輸入", "進口"]));
-  addIf(activities, "上市", matchAny(text, ["上市", "藥證", "許可證", "販售"]));
-  addIf(activities, "查驗登記", matchAny(text, ["查驗登記", "審查", "送審"]));
-  addIf(activities, "製造", matchAny(text, ["製造", "生產", "批次", "gmp"]));
-  addIf(activities, "臨床試驗", matchAny(text, ["臨床", "試驗", "phase", "人體試驗"]));
-  addIf(activities, "上市後管理", matchAny(text, ["流向", "追蹤", "保存", "上市後"]));
-  if (activities.length === 0) activities.push("上市", "查驗登記");
-
-  const riskKeywords = [];
-  addIf(riskKeywords, "癌症", matchAny(text, ["癌症", "腫瘤", "oncology"]));
-  addIf(riskKeywords, "人體細胞", matchAny(text, ["細胞", "自體", "異體"]));
-  addIf(riskKeywords, "高風險治療", matchAny(text, ["治療", "病人", "患者"]));
-  addIf(riskKeywords, "AI/軟體", matchAny(text, ["ai", "演算法", "軟體", "模型"]));
+  addIf(activities, "引入", matchAny(text, ["引入", "輸入", "進口", "代理"]));
+  addIf(activities, "上市", matchAny(text, ["上市", "販售", "銷售", "藥證"]));
+  addIf(activities, "查驗登記", matchAny(text, ["查驗", "登記", "審查", "送審"]));
+  addIf(activities, "製造", matchAny(text, ["製造", "生產", "代工", "gmp"]));
+  addIf(activities, "物流", matchAny(text, ["物流", "運輸", "配送", "倉儲", "gdp", "冷鏈"]));
+  addIf(activities, "供應來源與流向", matchAny(text, ["來源", "流向", "保存", "追蹤"]));
+  if (activities.length === 0) activities.push("引入", "上市", "查驗登記");
 
   const missingFacts = [];
-  if (productType === "cell" && !matchAny(text, ["自體", "異體"])) {
+  if (productType === "cell_therapy" && !matchAny(text, ["自體", "異體"])) {
     missingFacts.push("尚未說明細胞來源為自體或異體");
   }
-  if (!matchAny(text, ["台灣", "tw", "臺灣"])) {
-    missingFacts.push("目標管轄地目前由系統預設為台灣");
+  if (!matchAny(text, ["品質", "非臨床", "臨床", "gmp", "cmc"])) {
+    missingFacts.push("尚未提供品質、非臨床或臨床資料狀態");
   }
-  if (!matchAny(text, ["臨床", "非臨床", "品質", "gmp", "cmc"])) {
-    missingFacts.push("尚未提供品質、非臨床或臨床證據狀態");
+  if ((payload.law_type || []).includes("運輸 GDP") && !matchAny(text, ["冷鏈", "溫度", "倉儲", "物流"])) {
+    missingFacts.push("尚未說明倉儲、溫控、配送或委外物流條件");
   }
 
-  return { jurisdiction: "台灣", productType, activities, riskKeywords, missingFacts, rawScenario: scenario };
+  return {
+    jurisdiction: payload.market || "台灣",
+    productType,
+    productTypeLabel: translateProductType(productType),
+    role: payload.role || "進口代理商",
+    lawTypes: payload.law_type || ["查驗登記"],
+    activities,
+    missingFacts,
+    rawScenario: payload.user_intent || payload.scenario || "",
+  };
 }
 
 function retrieveCandidateLaws(facts) {
   return LAW_INDEX.map((law) => {
     let score = 0;
     const reasons = [];
-    if (law.jurisdiction === facts.jurisdiction) {
-      score += 12;
-      reasons.push("管轄地符合");
-    }
     if (law.productTypes.includes(facts.productType)) {
       score += 24;
       reasons.push("產品類型符合");
     }
+    if (law.roles.includes(facts.role)) {
+      score += 14;
+      reasons.push("角色定位符合");
+    }
+    const lawTypeMatches = facts.lawTypes.filter((type) => law.lawTypes.includes(type));
+    if (lawTypeMatches.length) {
+      score += lawTypeMatches.length * 10;
+      reasons.push(`法規類型符合: ${lawTypeMatches.join("、")}`);
+    }
     const activityMatches = facts.activities.filter((activity) => law.activities.includes(activity));
-    if (activityMatches.length > 0) {
-      score += activityMatches.length * 8;
-      reasons.push(`活動符合: ${activityMatches.join("、")}`);
+    if (activityMatches.length) {
+      score += activityMatches.length * 7;
+      reasons.push(`情境活動符合: ${activityMatches.join("、")}`);
     }
-    const topicMatches = facts.riskKeywords.filter((keyword) =>
-      law.topics.some((topic) => topic.includes(keyword) || keyword.includes(topic))
-    );
-    if (topicMatches.length > 0) {
-      score += topicMatches.length * 7;
-      reasons.push(`風險主題符合: ${topicMatches.join("、")}`);
-    }
-    if (law.level === "mother") {
-      score += 4;
+    if (law.level === "母法") {
+      score += 5;
       reasons.push("母法優先");
     }
-    const parent = law.parentId ? LAW_INDEX.find((item) => item.id === law.parentId) : null;
-    if (parent?.productTypes.includes(facts.productType)) {
-      score += 6;
+    if (law.parentId) {
+      score += 4;
       reasons.push("母子法關係符合");
     }
     return { law, score, reasons };
@@ -426,102 +373,116 @@ function retrieveCandidateLaws(facts) {
 
 function assessApplicability(facts, candidates) {
   return candidates.map((candidate) => {
-    const { law, score, reasons } = candidate;
     const missingFacts = [];
     let applicability = "potentially_applicable";
-    let confidence = Math.min(0.92, score / 72);
-    if (score >= 48) applicability = "likely_applicable";
-    if (score < 30) {
-      applicability = "needs_more_information";
-      confidence = Math.min(confidence, 0.55);
+    if (candidate.score >= 52) applicability = "likely_applicable";
+    if (candidate.score < 30) applicability = "needs_more_information";
+
+    if (candidate.law.lawTypes.includes("查驗登記") && !facts.activities.includes("查驗登記")) {
+      missingFacts.push("需確認是否已進入查驗登記或上市申請階段");
     }
-    if (law.id.includes("review") || law.id.includes("registration")) {
-      if (!facts.activities.includes("查驗登記")) missingFacts.push("需確認是否已進入查驗登記或上市申請階段");
-      if (!facts.rawScenario.includes("臨床") && !facts.rawScenario.includes("品質")) {
-        missingFacts.push("需補充品質、非臨床、臨床資料狀態");
-      }
+    if (candidate.law.lawTypes.includes("生產 GMP") && !facts.activities.includes("製造")) {
+      missingFacts.push("需確認是否涉及在地製造、委託製造或批次放行");
     }
-    if (law.id === "regen-source" && !facts.activities.includes("上市後管理")) {
-      missingFacts.push("需確認是否已有供應來源、流向與上市後追蹤設計");
+    if (candidate.law.lawTypes.includes("運輸 GDP") && !facts.activities.includes("物流")) {
+      missingFacts.push("需確認倉儲、運輸、冷鏈與委外物流安排");
     }
-    if (law.id === "regen-manufacturing" && !facts.activities.includes("製造")) {
-      missingFacts.push("需確認製造場所、批次紀錄與品質系統是否納入引入範圍");
-    }
+
     return {
-      law,
-      score,
-      reasons,
+      ...candidate,
       applicability,
-      confidence,
+      confidence: Math.min(0.95, Math.max(0.45, candidate.score / 82)),
       missingFacts,
-      conclusion: `${translateApplicability(applicability)}: ${law.title} (${law.pcode}) 應納入本案法規盤點。`,
+      conclusion: `${translateApplicability(applicability)}: ${candidate.law.title} (${candidate.law.pcode}) 應納入 ${facts.role} 的法規盤點。`,
     };
   });
 }
 
-function normalizeFacts(aiFacts, localFacts, scenario) {
-  const productTypes = ["cell", "drug", "device"];
+function buildApplicableLaws(assessments) {
+  return assessments.slice(0, 5).map((item) => ({
+    law_name: item.law.title,
+    pcode: item.law.pcode,
+    source_url: item.law.url,
+    article: item.law.article,
+    article_text: item.law.articleText,
+    applicability: item.applicability,
+    score: item.score,
+  }));
+}
+
+function buildSummaryChecklist(facts, assessments) {
   return {
-    jurisdiction: aiFacts.jurisdiction === "台灣" ? "台灣" : localFacts.jurisdiction,
-    productType: productTypes.includes(aiFacts.productType) ? aiFacts.productType : localFacts.productType,
-    activities: sanitizeList(aiFacts.activities, localFacts.activities),
-    riskKeywords: sanitizeList(aiFacts.riskKeywords, localFacts.riskKeywords),
-    missingFacts: sanitizeList(aiFacts.missingFacts, localFacts.missingFacts),
-    rawScenario: scenario,
+    role: facts.role,
+    summary_points: assessments.slice(0, 4).map((item) => item.law.plain),
+    checklist: Array.from(new Set(assessments.flatMap((item) => item.law.checklist))).slice(0, 10),
+    missing_facts: facts.missingFacts,
   };
 }
 
-function buildGaps(facts, assessments) {
-  const gaps = new Set(facts.missingFacts);
-  assessments.forEach((assessment) => assessment.missingFacts.forEach((fact) => gaps.add(fact)));
-  if (facts.productType === "cell") gaps.add("需建立母法、查驗登記、製造品質、供應來源與流向資料的完整 traceability。");
-  if (facts.productType === "drug") gaps.add("需盤點藥品查驗登記資料、GMP 與品質安全有效性證據。");
-  if (facts.productType === "device") gaps.add("需確認醫材分類分級、安全效能、品質系統與必要臨床評估資料。");
-  return Array.from(gaps);
-}
-
-function buildActions(facts, assessments) {
-  const topLawTitles = assessments.slice(0, 3).map((item) => item.law.title);
+function buildProcessStages(facts, assessments) {
+  const sourceLaw = assessments.find((item) => item.law.id.includes("source"))?.law;
+  const gmpLaw = assessments.find((item) => item.law.id.includes("gmp"))?.law;
+  const reviewLaw = assessments.find((item) => item.law.id.includes("review") || item.law.id.includes("registration"))?.law;
   return [
-    `RA 先審核前三個候選法規: ${topLawTitles.join("、")}。`,
-    "PM 將缺漏事實轉成問題清單，補齊產品來源、開發階段、品質與臨床資料狀態。",
-    "後端下一步可接法務部爬蟲，用 PCode 抓取即時條文並更新索引版本。",
-    "AI 只做 facts extraction 與 applicability rationale，候選法規仍由檢索層提供。",
+    {
+      stage_title: "【源頭管理】供應來源與資格確認",
+      law_name: sourceLaw?.title || "再生醫療製劑供應來源及流向資料保存辦法",
+      control_points: ["供應來源確認", "來源與流向紀錄", "追溯與召回準備"],
+      owner: facts.role === "供應鏈物流" ? "供應鏈 / 物流" : "進口代理商與 RA",
+    },
+    {
+      stage_title: "【廠內製造】GMP 與品質管理",
+      law_name: gmpLaw?.title || "藥物優良製造準則",
+      control_points: ["製造場所資格", "批次紀錄", "放行標準", "品質系統"],
+      owner: facts.role.includes("藥廠") ? facts.role : "製造商 / 代工藥廠",
+    },
+    {
+      stage_title: "【上市審查】查驗登記與運銷",
+      law_name: reviewLaw?.title || "藥品查驗登記審查準則",
+      control_points: ["品質資料", "非臨床與臨床資料", "GDP 運輸與配送", "官方來源留存"],
+      owner: "RA、BD 與 QA",
+    },
   ];
 }
 
 function buildTraceability(assessments) {
-  return assessments.map((assessment) => ({
-    conclusion: assessment.conclusion,
-    source: assessment.law,
-    applicability: assessment.applicability,
-    confidence: assessment.confidence,
+  return assessments.slice(0, 6).map((item) => ({
+    conclusion: item.conclusion,
+    source: item.law,
+    applicability: item.applicability,
+    confidence: item.confidence,
   }));
 }
 
 function calculateOverallConfidence(assessments) {
-  if (assessments.length === 0) return 0;
-  const topThree = assessments.slice(0, 3);
-  return Math.round((topThree.reduce((sum, item) => sum + item.confidence, 0) / topThree.length) * 100);
+  if (!assessments.length) return 0;
+  const top = assessments.slice(0, 3);
+  return Math.round((top.reduce((sum, item) => sum + item.confidence, 0) / top.length) * 100);
 }
 
-function buildMermaid(facts, assessments) {
-  const top = assessments.slice(0, 4);
-  const candidateNodes = top.map((item, index) => `  B --> C${index + 1}["${item.law.title}"]`).join("\n");
-  const assessmentNodes = top
-    .map((item, index) => `  C${index + 1} --> D["適用性判斷: ${translateApplicability(item.applicability)}"]`)
-    .join("\n");
-  return `graph LR
-  A["情境輸入"] --> B["法律事實: ${translateProductType(facts.productType)} / ${facts.activities.join("、")}"]
-${candidateNodes}
-${assessmentNodes}
-  D --> E["官方來源 Traceability"]
-  E --> F["合規缺口與 Action Plan"]`;
+function normalizeSummary(value, fallback) {
+  if (!value || typeof value !== "object") return fallback;
+  return {
+    role: typeof value.role === "string" ? value.role : fallback.role,
+    summary_points: sanitizeList(value.summary_points, fallback.summary_points),
+    checklist: sanitizeList(value.checklist, fallback.checklist),
+    missing_facts: sanitizeList(value.missing_facts, fallback.missing_facts),
+  };
+}
+
+function normalizeStages(value, fallback) {
+  if (!Array.isArray(value) || value.length === 0) return fallback;
+  return value.slice(0, 3).map((stage, index) => ({
+    stage_title: String(stage.stage_title || fallback[index]?.stage_title || `階段 ${index + 1}`),
+    law_name: String(stage.law_name || fallback[index]?.law_name || "待確認法規"),
+    control_points: sanitizeList(stage.control_points, fallback[index]?.control_points || []),
+    owner: String(stage.owner || fallback[index]?.owner || "RA / PM"),
+  }));
 }
 
 function safeStaticPath(urlPath) {
   const normalized = urlPath === "/" ? "/index.html" : decodeURIComponent(urlPath);
-  const filePath = path.join(__dirname, normalized);
+  const filePath = path.resolve(__dirname, `.${normalized}`);
   if (!filePath.startsWith(__dirname)) return null;
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return null;
   return filePath;
@@ -537,7 +498,7 @@ function readJson(req) {
     req.on("end", () => {
       try {
         resolve(JSON.parse(body || "{}"));
-      } catch (error) {
+      } catch {
         reject(new Error("Invalid JSON"));
       }
     });
@@ -579,7 +540,7 @@ function parseJsonObject(text) {
 function sanitizeList(value, fallback) {
   if (!Array.isArray(value)) return fallback;
   const cleaned = value.map((item) => String(item).trim()).filter(Boolean);
-  return cleaned.length > 0 ? cleaned : fallback;
+  return cleaned.length ? cleaned : fallback;
 }
 
 function addIf(list, value, condition) {
@@ -592,10 +553,11 @@ function matchAny(text, terms) {
 
 function translateProductType(type) {
   return {
-    cell: "細胞製劑 / 再生醫療製劑",
-    drug: "新藥 / 藥品",
-    device: "醫療器材",
-  }[type] || "未分類";
+    prescription_drug: "處方藥",
+    otc_drug: "指示藥",
+    general_drug: "成藥",
+    cell_therapy: "細胞製劑 / 再生醫療製劑",
+  }[type] || "自動判斷";
 }
 
 function translateApplicability(value) {
@@ -609,7 +571,6 @@ function translateApplicability(value) {
 function loadDotEnv() {
   const envPath = path.join(__dirname, ".env");
   if (!fs.existsSync(envPath)) return;
-
   const content = fs.readFileSync(envPath, "utf8");
   for (const line of content.split(/\r?\n/)) {
     const trimmed = line.trim();
@@ -618,8 +579,6 @@ function loadDotEnv() {
     if (eqIndex === -1) continue;
     const key = trimmed.slice(0, eqIndex).trim();
     const value = trimmed.slice(eqIndex + 1).trim().replace(/^["']|["']$/g, "");
-    if (key && process.env[key] === undefined) {
-      process.env[key] = value;
-    }
+    if (key && process.env[key] === undefined) process.env[key] = value;
   }
 }
