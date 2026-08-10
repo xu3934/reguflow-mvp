@@ -166,13 +166,14 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, {
         apiConfigured: Boolean(OPENAI_API_KEY),
         model: OPENAI_API_KEY ? OPENAI_MODEL : null,
-        mode: OPENAI_API_KEY ? "openai_ready" : "local_fallback",
+        mode: OPENAI_API_KEY ? "pipeline_ready" : "local_fallback",
+        pipeline: "A→Scrape→B→Scrape→C+D",
       });
     }
 
     if (req.method === "POST" && (url.pathname === "/api/v1/analyze" || url.pathname === "/api/analyze")) {
       const payload = await readJson(req);
-      const report = await analyzeWithOptionalAi(payload);
+      const report = await analyzeWithPipeline(payload);
       return sendJson(res, 200, report);
     }
 
@@ -196,66 +197,371 @@ server.listen(PORT, () => {
   console.log(OPENAI_API_KEY ? `AI mode enabled with ${OPENAI_MODEL}` : "AI mode disabled. Using local fallback.");
 });
 
-async function analyzeWithOptionalAi(payload) {
-  const localReport = buildReport(extractFacts(payload), "local_fallback");
+// ---------------------------------------------------------------------------
+// Pipeline orchestrator
+// ---------------------------------------------------------------------------
+
+async function analyzeWithPipeline(payload) {
+  // Step 1: always compute local data first (used as fallback at every stage)
+  const facts = extractFacts(payload);
+  const candidates = retrieveCandidateLaws(facts);
+  const assessments = assessApplicability(facts, candidates).slice(0, 6);
+  const localReport = buildLocalReport(facts, candidates, assessments);
+
   if (!OPENAI_API_KEY) return localReport;
 
   try {
-    const aiResult = await generateRoleBriefWithOpenAI(payload, localReport);
+    // Step 3a: Prompt A — identify mother law PCode
+    let pcode;
+    let motherLawName;
+    try {
+      const promptAResult = await runPromptA(payload);
+      pcode = promptAResult.pcode;
+      motherLawName = promptAResult.law_name || "";
+    } catch (err) {
+      // Fallback to top assessment law
+      const topAssessment = assessments[0];
+      if (!topAssessment) throw new Error("No candidate laws found and Prompt A failed: " + err.message);
+      pcode = topAssessment.law.pcode;
+      motherLawName = topAssessment.law.title;
+    }
+
+    // Step 3b: Fetch mother law text
+    const motherLawText = await fetchLawText(pcode);
+
+    // Step 3c: Prompt B — extract sub-law authorization phrases
+    let subLawRefs = [];
+    try {
+      subLawRefs = await runPromptB(motherLawText, motherLawName || pcode);
+    } catch {
+      subLawRefs = [];
+    }
+
+    // Step 3d: For each sub-law tag (max 3), find PCode and fetch text — run in parallel
+    const subLawTags = subLawRefs.slice(0, 3).map((ref) => ref.search_tag).filter(Boolean);
+    const subLawResults = await Promise.allSettled(
+      subLawTags.map(async (tag) => {
+        const subPcode = await findPcodeByName(tag);
+        if (!subPcode) return null;
+        const text = await fetchLawText(subPcode);
+        return { tag, pcode: subPcode, text };
+      })
+    );
+    const subLawTexts = subLawResults
+      .filter((r) => r.status === "fulfilled" && r.value && r.value.text)
+      .map((r) => r.value);
+
+    // Step 3e: Build combined law text string (cap at 20000 chars)
+    let allLawTexts = `【母法: ${motherLawName || pcode}】\n${motherLawText}`;
+    for (const sub of subLawTexts) {
+      allLawTexts += `\n\n【子法: ${sub.tag} (${sub.pcode})】\n${sub.text}`;
+    }
+    if (allLawTexts.length > 20000) allLawTexts = allLawTexts.slice(0, 20000);
+
+    const role = facts.role;
+
+    // Step 3f: Run Prompt C and Prompt D in parallel
+    const [resultC, resultD] = await Promise.allSettled([
+      runPromptC(allLawTexts, role),
+      runPromptD(allLawTexts, role),
+    ]);
+
+    const promptCData = resultC.status === "fulfilled" ? resultC.value : null;
+    const promptDData = resultD.status === "fulfilled" ? resultD.value : null;
+
+    // Step 3g: Merge AI results with local fallbacks
+    const applicable_laws =
+      promptCData && Array.isArray(promptCData.applicable_laws) && promptCData.applicable_laws.length > 0
+        ? promptCData.applicable_laws
+        : localReport.applicable_laws;
+
+    const summary_and_checklist = normalizeSummary(
+      promptCData
+        ? {
+            role: promptCData.role || role,
+            summary_points: promptCData.summary_points,
+            checklist: promptCData.checklist,
+            missing_facts: promptCData.missing_facts,
+          }
+        : null,
+      localReport.summary_and_checklist
+    );
+
+    const process_stages = normalizeStages(
+      Array.isArray(promptDData) && promptDData.length > 0 ? promptDData : null,
+      localReport.process_stages
+    );
+
     return {
-      ...localReport,
-      mode: "openai",
+      mode: "pipeline",
       model: OPENAI_MODEL,
-      summary_and_checklist: normalizeSummary(aiResult.summary_and_checklist, localReport.summary_and_checklist),
-      process_stages: normalizeStages(aiResult.process_stages, localReport.process_stages),
+      analyzedAt: new Date().toISOString(),
+      facts,
+      candidates: candidates.slice(0, 7),
+      assessments,
+      confidence: calculateOverallConfidence(assessments),
+      applicable_laws,
+      summary_and_checklist,
+      process_stages,
+      traceability: buildTraceability(assessments),
     };
-  } catch (error) {
-    return { ...localReport, mode: "ai_failed_fallback", aiError: error.message };
+  } catch (err) {
+    return { ...localReport, mode: "ai_failed_fallback", aiError: err.message };
   }
 }
 
-async function generateRoleBriefWithOpenAI(payload, report) {
-  const prompt = `Input:
-${JSON.stringify(payload, null, 2)}
+// ---------------------------------------------------------------------------
+// Prompt A — identify mother law PCode from user intent + role + law_type
+// ---------------------------------------------------------------------------
 
-Retrieved laws:
-${JSON.stringify(report.applicable_laws, null, 2)}
+async function runPromptA(payload) {
+  const motherLaws = LAW_INDEX.filter((l) => l.level === "母法");
+  const lawListText = motherLaws
+    .map((l) => `- ${l.title} (PCode: ${l.pcode})`)
+    .join("\n");
 
-Local draft:
-${JSON.stringify(
-  {
-    summary_and_checklist: report.summary_and_checklist,
-    process_stages: report.process_stages,
-  },
-  null,
-  2
-)}
+  const userIntent = payload.user_intent || payload.scenario || "";
+  const role = payload.role || "進口代理商";
+  const lawType = Array.isArray(payload.law_type) ? payload.law_type.join("、") : (payload.law_type || "查驗登記");
 
-Return strict JSON only:
-{
-  "summary_and_checklist": {
-    "role": string,
-    "summary_points": string[],
-    "checklist": string[],
-    "missing_facts": string[]
-  },
-  "process_stages": [
-    {
-      "stage_title": string,
-      "law_name": string,
-      "control_points": string[],
-      "owner": string
-    }
-  ]
-}`;
+  const input = `請分析使用者的情境：'${userIntent}'，並參考其角色定位 '${role}' 與法規類型 '${lawType}'，判斷其對應的台灣生醫法規 PCode。請嚴格以 JSON 格式輸出：{"pcode": "法規代碼", "law_name": "母法名稱"}。
+
+以下為已知母法清單供參考：
+${lawListText}`;
 
   const text = await callOpenAI({
     instructions:
-      "You write Taiwan pharma regulatory summaries for BD, PM, RA, QA and logistics users. Use only the retrieved laws. Do not invent laws or citations. Return strict JSON only.",
-    input: prompt,
+      "你是台灣生醫法規專家。請根據使用者情境判斷最相關的母法 PCode，只輸出 JSON，不要有其他說明。",
+    input,
   });
+
+  const result = parseJsonObject(text);
+  if (!result.pcode || result.pcode.trim() === "") {
+    throw new Error("Prompt A returned empty pcode");
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Prompt B — extract sub-law authorization phrases from mother law text
+// ---------------------------------------------------------------------------
+
+async function runPromptB(motherLawText, lawName) {
+  const input = `以下是母法「${lawName}」的全文：
+
+${motherLawText}
+
+請找出其中授權訂定子法的條文，例如含有「由中央主管機關定之」、「另以辦法定之」、「依法訂定」等授權語句的條文，並以 JSON 陣列格式輸出，每筆包含：
+- source_law: 母法名稱
+- article: 條文編號
+- search_tag: 被授權子法的可能名稱或關鍵字（用於搜尋）
+
+只輸出 JSON 陣列，不要有其他說明。`;
+
+  const text = await callOpenAI({
+    instructions:
+      "你是台灣法規文本分析專家。請從母法條文中識別授權子法的條款，嚴格以 JSON 陣列格式輸出，不要有任何其他說明。",
+    input,
+  });
+
+  const result = parseJsonSafe(text);
+  if (!Array.isArray(result)) return [];
+  return result.slice(0, 4);
+}
+
+// ---------------------------------------------------------------------------
+// Prompt C — applicable laws + summary + checklist + missing facts
+// ---------------------------------------------------------------------------
+
+async function runPromptC(allLawTexts, role) {
+  const input = `以下是與本案相關的法規全文：
+
+${allLawTexts}
+
+請根據以上法規內容，針對角色「${role}」，輸出以下 JSON 格式的分析結果：
+{
+  "applicable_laws": [
+    {
+      "law_name": "法規名稱",
+      "pcode": "法規代碼",
+      "article": "相關條文",
+      "article_text": "條文內容摘要",
+      "applicability": "likely_applicable | potentially_applicable | needs_more_information"
+    }
+  ],
+  "summary_points": ["重點摘要1", "重點摘要2"],
+  "checklist": ["查核項目1", "查核項目2"],
+  "missing_facts": ["尚缺資訊1", "尚缺資訊2"]
+}
+
+只輸出 JSON，不要有其他說明。`;
+
+  const text = await callOpenAI({
+    instructions:
+      "你是台灣生醫法規顧問，專為 BD、PM、RA、QA 及物流人員撰寫法規摘要。只根據提供的法規內容作答，不得虛構法條或引用。只輸出 JSON。",
+    input,
+  });
+
   return parseJsonObject(text);
 }
+
+// ---------------------------------------------------------------------------
+// Prompt D — process stages (exactly 3 stages)
+// ---------------------------------------------------------------------------
+
+async function runPromptD(allLawTexts, role) {
+  const input = `以下是與本案相關的法規全文：
+
+${allLawTexts}
+
+請根據以上法規內容，針對角色「${role}」，輸出恰好 3 個作業階段的 JSON 陣列，每個階段包含：
+- stage_title: 階段名稱（例如「【源頭管理】供應來源確認」）
+- law_name: 該階段依據的主要法規名稱
+- control_points: 該階段的查核重點（字串陣列）
+- owner: 負責單位或角色
+
+只輸出 JSON 陣列，不要有其他說明。`;
+
+  const text = await callOpenAI({
+    instructions:
+      "你是台灣生醫法規顧問。請根據提供的法規內容規劃 3 個作業階段，嚴格以 JSON 陣列格式輸出，不要有任何其他說明。",
+    input,
+  });
+
+  const result = parseJsonSafe(text);
+  if (!Array.isArray(result)) return null;
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Web scraper helpers
+// ---------------------------------------------------------------------------
+
+async function httpGet(url, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+      },
+      redirect: "follow",
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status} from ${url}`);
+    return await response.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseLawHtml(html) {
+  // Remove script and style blocks
+  let text = html.replace(/<script[\s\S]*?<\/script>/gi, "");
+  text = text.replace(/<style[\s\S]*?<\/style>/gi, "");
+  // Remove all remaining HTML tags
+  text = text.replace(/<[^>]+>/g, " ");
+  // Decode HTML entities
+  text = text
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+  // Collapse whitespace into newlines
+  text = text.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  // Filter lines to only those with 3+ chars
+  const lines = text.split("\n").filter((line) => line.trim().length >= 3);
+  const result = lines.join("\n");
+  return result.slice(0, 10000);
+}
+
+async function fetchLawText(pcode) {
+  try {
+    const url = findSourceUrl(pcode);
+    const html = await httpGet(url);
+    return parseLawHtml(html);
+  } catch {
+    // Fallback to static index
+    const entry = LAW_INDEX.find((l) => l.pcode === pcode);
+    if (entry) {
+      return `【${entry.title}】\n${entry.article}: ${entry.articleText}`;
+    }
+    return "";
+  }
+}
+
+async function findPcodeByName(lawName) {
+  if (!lawName || !lawName.trim()) return null;
+  const trimmed = lawName.trim();
+
+  // Check static LAW_INDEX first
+  const found = LAW_INDEX.find(
+    (l) => l.title.includes(trimmed) || trimmed.includes(l.title)
+  );
+  if (found) return found.pcode;
+
+  // Try search endpoint
+  try {
+    const searchUrl = `https://law.moj.gov.tw/Law/LawSearchResult.aspx?p=NI&t=E1&k=${encodeURIComponent(trimmed)}`;
+    const html = await httpGet(searchUrl);
+    const match = html.match(/pcode=([A-Z][0-9A-Z]{7})/i);
+    if (match) return match[1];
+  } catch {
+    // Search failed, return null
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// New helper functions
+// ---------------------------------------------------------------------------
+
+function findSourceUrl(pcode) {
+  const entry = LAW_INDEX.find((l) => l.pcode === pcode);
+  if (entry) return entry.url;
+  return `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${pcode}`;
+}
+
+function parseJsonSafe(text) {
+  try {
+    const trimmed = text.trim();
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      const objMatch = trimmed.match(/\{[\s\S]*\}/);
+      const arrMatch = trimmed.match(/\[[\s\S]*\]/);
+      if (arrMatch) return JSON.parse(arrMatch[0]);
+      if (objMatch) return JSON.parse(objMatch[0]);
+      return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+function buildLocalReport(facts, candidates, assessments) {
+  return {
+    mode: "local_fallback",
+    model: null,
+    analyzedAt: new Date().toISOString(),
+    facts,
+    candidates: candidates.slice(0, 7),
+    assessments,
+    confidence: calculateOverallConfidence(assessments),
+    applicable_laws: buildApplicableLaws(assessments),
+    summary_and_checklist: buildSummaryChecklist(facts, assessments),
+    process_stages: buildProcessStages(facts, assessments),
+    traceability: buildTraceability(assessments),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// OpenAI caller
+// ---------------------------------------------------------------------------
 
 async function callOpenAI({ instructions, input }) {
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -271,23 +577,9 @@ async function callOpenAI({ instructions, input }) {
   return extractOutputText(json);
 }
 
-function buildReport(facts, mode) {
-  const candidates = retrieveCandidateLaws(facts);
-  const assessments = assessApplicability(facts, candidates).slice(0, 6);
-  return {
-    mode,
-    model: mode === "openai" ? OPENAI_MODEL : null,
-    analyzedAt: new Date().toISOString(),
-    facts,
-    candidates: candidates.slice(0, 7),
-    assessments,
-    confidence: calculateOverallConfidence(assessments),
-    applicable_laws: buildApplicableLaws(assessments),
-    summary_and_checklist: buildSummaryChecklist(facts, assessments),
-    process_stages: buildProcessStages(facts, assessments),
-    traceability: buildTraceability(assessments),
-  };
-}
+// ---------------------------------------------------------------------------
+// Local analysis functions
+// ---------------------------------------------------------------------------
 
 function extractFacts(payload) {
   const text = `${payload.user_intent || payload.scenario || ""}`.toLowerCase();
@@ -460,6 +752,10 @@ function calculateOverallConfidence(assessments) {
   return Math.round((top.reduce((sum, item) => sum + item.confidence, 0) / top.length) * 100);
 }
 
+// ---------------------------------------------------------------------------
+// Normalizers
+// ---------------------------------------------------------------------------
+
 function normalizeSummary(value, fallback) {
   if (!value || typeof value !== "object") return fallback;
   return {
@@ -479,6 +775,10 @@ function normalizeStages(value, fallback) {
     owner: String(stage.owner || fallback[index]?.owner || "RA / PM"),
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Utility functions
+// ---------------------------------------------------------------------------
 
 function safeStaticPath(urlPath) {
   const normalized = urlPath === "/" ? "/index.html" : decodeURIComponent(urlPath);

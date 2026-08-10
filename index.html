@@ -42,8 +42,7 @@
           <div class="source-card">
             <p class="section-label">使用指引</p>
             <p>
-              輸入角色、產品與引入情境後，系統會用台灣法規索引與官方 PCode 來源建立可追溯報告。
-              AI 只負責事實抽取與白話整理，不直接發明法條。
+              本系統即時串接法務部全國法規資料庫，確保資訊零幻覺。輸入情境後系統自動完成法規路徑、白話重點與合規流程圖。
             </p>
           </div>
         </aside>
@@ -120,8 +119,11 @@
           </section>
 
           <section class="progress-section hidden" id="progressSection" aria-live="polite">
+            <div class="spinner-row">
+              <span class="spinner" aria-hidden="true"></span>
+              <p id="progressText">正在連線法務部法規資料庫並進行 AI 分析，請稍候...</p>
+            </div>
             <div class="progress-track"><span id="progressBar"></span></div>
-            <p id="progressText">正在連線法規資料庫並進行 AI 分析，請稍候...</p>
           </section>
 
           <section class="results-grid hidden" id="results">

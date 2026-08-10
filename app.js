@@ -521,18 +521,18 @@ async function checkApiHealth() {
     if (!response.ok) throw new Error(`Health check failed: ${response.status}`);
     const health = await response.json();
     if (health.apiConfigured) {
-      setModeBadge("OpenAI API ready", "openai");
-      apiStatus.textContent = `後端 API Online，已偵測到 OPENAI_API_KEY。模型: ${health.model}`;
-      sidebarStatus.textContent = "Backend API Online";
+      setModeBadge("AI Pipeline ready", "openai");
+      apiStatus.textContent = `🟢 後端 API Online，已偵測到 OPENAI_API_KEY。模型: ${health.model}。管線: ${health.pipeline || "A→Scrape→B→Scrape→C+D"}`;
+      sidebarStatus.textContent = "🟢 Backend API Online";
     } else {
       setModeBadge("Local fallback", "local_fallback");
-      apiStatus.textContent = "後端 API Online，但尚未設定 OPENAI_API_KEY；目前不會收費。";
-      sidebarStatus.textContent = "Backend Online / AI fallback";
+      apiStatus.textContent = "🟡 後端 API Online，但尚未設定 OPENAI_API_KEY；使用本地靜態備援，不會收費。";
+      sidebarStatus.textContent = "🟡 Backend Online / AI fallback";
     }
   } catch (error) {
     setModeBadge("API server unavailable", "api_failed_fallback");
-    apiStatus.textContent = `無法連到後端，會使用本地 fallback。原因: ${error.message}`;
-    sidebarStatus.textContent = "Backend Offline";
+    apiStatus.textContent = `🔴 無法連到後端，會使用本地 fallback。原因: ${error.message}`;
+    sidebarStatus.textContent = "🔴 Backend Offline";
   }
 }
 
@@ -564,6 +564,7 @@ function setModeBadge(label, mode) {
 
 function getModeLabel(mode) {
   return {
+    ai_pipeline: "AI Pipeline (法務部即時串接)",
     openai: "OpenAI API",
     local_fallback: "Local fallback",
     api_failed_fallback: "API failed - local fallback",
