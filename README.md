@@ -1,53 +1,166 @@
 # ReguFlow MVP
 
-ReguFlow 是一個醫藥法規自動化檢索系統 MVP。此版本根據 PRD 的核心流程，做成可直接開啟的本地 Web prototype：
+ReguFlow is an AI-native regulatory retrieval prototype for Taiwan pharma and biomedical product workflows. It helps BD, PM, RA, QA, and logistics users turn a product-introduction scenario into a grounded regulatory report, role-specific checklist, and process-flow cards.
 
-- PM / BD 輸入角色定位、產品類型、法規類型與引入情境
-- 系統判斷母法與 PCode
-- 追蹤授權子法
-- 產出法規適用性報告、白話重點、Checklist、官方來源 traceability table
-- 產生三階段 SaaS 卡片式流程圖
+Live demo:
 
-## 如何執行
+https://reguflow-mvp.onrender.com/?v=20260810v2
 
-直接用瀏覽器開啟：
+API health check:
+
+https://reguflow-mvp.onrender.com/api/health
+
+## What It Does
+
+ReguFlow is designed to reduce hallucination risk in regulatory search. Instead of asking an AI model to "remember" applicable laws, the app follows a structured pipeline:
+
+1. Extract legal facts from the user scenario.
+2. Match candidate laws from a curated Taiwan regulatory index.
+3. Rank laws by product type, user role, law type, and activity.
+4. Assess applicability and missing facts.
+5. Generate a grounded regulatory report with official source links.
+6. Generate role-specific plain-language summaries and checklists.
+7. Render a three-stage SaaS-style regulatory process map.
+
+## User Guide
+
+Open the live demo:
+
+https://reguflow-mvp.onrender.com/?v=20260810v2
+
+Then fill in:
+
+- Scenario: e.g. "我是代理商 BD，要引入細胞製劑，請告訴我相關的查驗與物流規範"
+- Target market: Taiwan
+- Product type: prescription drug, OTC drug, general drug, or cell therapy product
+- Role: R&D pharma company, CDMO, API manufacturer, import agent, or logistics provider
+- Law type: GDP, GMP, registration review, supply source and flow tracking
+
+Click:
 
 ```text
-index.html
+開始法規檢索與生成報告
 ```
 
-或用任一靜態伺服器 serving 這個資料夾。
+The output includes:
 
-## MVP 設計取捨
+- Regulatory applicability report
+- Official source links and PCode references
+- Role-specific plain-language summary
+- Checklist
+- Candidate-law ranking
+- Three-stage regulatory and supply-chain flow cards
+- Traceability table
 
-PRD 原本設計為 Streamlit + FastAPI + Bedrock + 法務部爬蟲。本 MVP 為 hackathon 一日開發做了三個縮小：
+## API Status
 
-1. 前後端先合併成單頁 Web app，降低整合風險。
-2. 法務部爬蟲先用內建法規索引模擬，保留官方 PCode URL。
-3. AI pipeline 先用 deterministic analyzer + golden fallback，之後可替換成 LLM structured output。
-4. 檢索邏輯改成「法律事實抽取 -> 候選法規排序 -> 適用性判斷 -> traceability」，避免單純讓 AI 模型憑記憶搜尋法條。
-5. V2 改成角色導向輸出：左欄法規條文與來源、右欄白話重點與 Checklist、下欄三階段流程卡片。
+The app supports OpenAI API mode and local fallback mode.
 
-## 目前是否需要 AI API
+Check:
 
-不一定需要。這個版本支援兩種模式：
+```text
+/api/health
+```
 
-- 直接開 `index.html`：完全本地 fallback，不會呼叫 OpenAI、Bedrock 或其他付費 API。
-- 用 `server.js` 啟動：若設定 `OPENAI_API_KEY`，會呼叫 OpenAI API；若沒有 key 或 API 失敗，會自動回到本地 fallback。
+Example successful response:
 
-目前的本地函式：
+```json
+{
+  "apiConfigured": true,
+  "model": "gpt-4.1-mini",
+  "mode": "openai_ready"
+}
+```
 
-- `extractFacts(scenario, selectedType)`：把使用者情境轉成產品類型、活動、管轄地、風險關鍵字、缺漏事實。
-- `retrieveCandidateLaws(facts)`：用產品類型、活動、主題、母子法關係排序候選法規。
-- `assessApplicability(facts, candidates)`：判斷 likely / possible / needs more information，並列出缺漏事實。
+Modes:
 
-V2 後端端點：
+- `openai_ready`: the server has an API key and will call OpenAI.
+- `local_fallback`: no API key is configured; the app uses deterministic local logic.
+- `ai_failed_fallback`: an API key exists, but the AI call failed and the app returned a safe local fallback.
+
+## For Developers
+
+Clone the project:
+
+```powershell
+git clone https://github.com/xu3934/reguflow-mvp.git
+cd reguflow-mvp
+```
+
+Create a local environment file:
+
+```powershell
+copy .env.example .env
+```
+
+Edit `.env`:
+
+```text
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-4.1-mini
+PORT=3000
+```
+
+Start the app:
+
+```powershell
+npm start
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+Run syntax checks:
+
+```powershell
+npm run check
+```
+
+## Project Structure
+
+```text
+reguflow-mvp/
+  index.html      Frontend layout
+  styles.css      B2B SaaS UI styling
+  app.js          Browser-side interaction and fallback analysis
+  server.js       Node.js server, API routes, OpenAI integration
+  render.yaml     Render deployment config
+  .env.example    Local environment variable template
+  package.json    Scripts and project metadata
+```
+
+## API
+
+### Health
+
+```text
+GET /api/health
+```
+
+Returns whether OpenAI API mode is configured.
+
+### Analyze
 
 ```text
 POST /api/v1/analyze
 ```
 
-輸出包含：
+Request body:
+
+```json
+{
+  "user_intent": "我是代理商 BD，要引入細胞製劑...",
+  "market": "台灣",
+  "product_type": "cell_therapy",
+  "role": "進口代理商",
+  "law_type": ["運輸 GDP", "生產 GMP", "查驗登記"]
+}
+```
+
+Response includes:
 
 ```text
 applicable_laws
@@ -56,70 +169,30 @@ process_stages
 traceability
 ```
 
-## 啟動 AI API 模式
+## Deployment
 
-PowerShell:
+This project is deployed on Render as a Node.js web service.
 
-```powershell
-node server.js
-```
-
-然後開啟：
+Render settings:
 
 ```text
-http://localhost:3000
+Build command: npm install
+Start command: npm start
 ```
 
-API key 只存在本機後端環境變數，不會出現在前端程式碼。
-
-也可以複製 `.env.example` 成 `.env`，填入自己的 key：
+Environment variables:
 
 ```text
-OPENAI_API_KEY=你的 API key
-OPENAI_MODEL=gpt-4.1-mini
-PORT=3000
-```
-
-## 後續接真後端
-
-目前已新增 `server.js` 作為本機後端。後續若要接正式 FastAPI / Bedrock，可把以下兩段替換掉：
-
-- `extractFacts`
-- `assessApplicability`
-- `buildMermaid`
-
-其中 `retrieveCandidateLaws` 建議保留為 deterministic retrieval，或改成後端 hybrid search，不建議完全交給 LLM。
-
-後端可實作：
-
-```text
-POST /analyze
-  -> LLM: scenario to structured legal facts
-  -> retrieval: keyword + topic + PCode + law hierarchy search
-  -> crawler: law.moj.gov.tw by PCode
-  -> LLM/reranker: applicability assessment only against retrieved laws
-  -> response: grounded report JSON + Mermaid
-```
-
-請把 `.env`、AWS credentials、OpenAI API key 或 Bedrock credentials 加入 `.gitignore`。
-
-## 雲端部署給組員使用
-
-最簡單的方式是部署到 Render，因為本專案是 Node.js server，且需要在後端保存 `OPENAI_API_KEY`。
-
-1. 到 Render 建立帳號並連接 GitHub。
-2. 選擇 `xu3934/reguflow-mvp` repository。
-3. 建立 Web Service。
-4. Render 會讀取 `render.yaml`，使用：
-   - Build command: `npm install`
-   - Start command: `npm start`
-5. 在 Render 的 Environment Variables 設定：
-
-```text
-OPENAI_API_KEY=你的 OpenAI API key
+OPENAI_API_KEY=your_openai_api_key
 OPENAI_MODEL=gpt-4.1-mini
 ```
 
-部署成功後，Render 會給一個公開網址。組員只要打開該網址即可使用，不需要 clone repo，也不需要知道你的 API key。
+Do not commit `.env` or real API keys. The repository intentionally tracks `.env.example` only.
 
-注意：雲端部署後，所有組員的 API 使用量會算在你設定的 `OPENAI_API_KEY` 上，建議在 OpenAI Billing 設定用量上限。
+## Notes And Limitations
+
+- This is a hackathon MVP, not legal advice.
+- The current regulatory index is curated and intentionally small.
+- Official law links are shown for traceability, but production use should add real-time crawling from `law.moj.gov.tw`.
+- AI is used only for role-aware summarization and structured output refinement. Candidate-law retrieval remains deterministic to reduce hallucination risk.
+- All outputs should be reviewed by RA or legal professionals before business use.
