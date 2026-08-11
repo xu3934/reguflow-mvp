@@ -179,6 +179,112 @@ const LAW_INDEX = [
       "如果產品的主要適應症是預防、診斷或治療罕見疾病，可以申請認定為罕見疾病藥物，走專屬的查驗登記管道，跟一般藥品查驗登記是不同的申請路徑。",
     checklist: ["確認適應症是否符合罕見疾病藥物認定條件", "向審議會提出罕見疾病藥物認定申請", "依罕見疾病藥物專屬管道辦理查驗登記"],
   },
+  {
+    id: "controlled-drug-act",
+    pcode: "L0030010",
+    level: "母法",
+    title: "管制藥品管理條例",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030010",
+    productTypes: ["prescription_drug"],
+    roles: ["進口代理商", "研發藥廠", "代工藥廠"],
+    lawTypes: ["查驗登記", "供應來源與流向"],
+    activities: ["管制藥品", "製造", "輸入"],
+    article: "第3條、第16條",
+    articleText:
+      "本條例所稱管制藥品，指成癮性麻醉藥品、影響精神藥品及其他認為有加強管理必要之藥品；機構須申請核准登記取得管制藥品登記證，始得辦理輸入、輸出、製造、販賣或購買等業務。",
+    plain:
+      "如果產品屬於成癮性麻醉藥品或影響精神藥品，除了一般藥品的查驗登記，還要另外申請管制藥品登記證才能輸入、製造或販賣，這是額外且獨立的許可關卡。",
+    checklist: ["確認產品是否屬於第一級至第三級管制藥品", "申請管制藥品登記證", "確認經手人員是否領有管制藥品使用執照"],
+  },
+  {
+    id: "pharmacist-act",
+    pcode: "L0030066",
+    level: "母法",
+    title: "藥師法",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030066",
+    productTypes: ["prescription_drug", "otc_drug", "general_drug", "cell_therapy"],
+    roles: ["代工藥廠", "研發藥廠", "原料藥廠"],
+    lawTypes: ["生產 GMP"],
+    activities: ["藥師", "監製", "製造"],
+    article: "第1條、第15條第4項",
+    articleText:
+      "中華民國人民經藥師考試及格者，得充藥師；藥品製造之監製為藥師業務之一。",
+    plain:
+      "藥品製造現場需要有考試及格的專任藥師負責監製，這是藥師法對製造業者的人員資格要求，跟各別產品的 GMP 廠房要求是分開的兩件事。",
+    checklist: ["確認製造現場配置具藥師執照之專任人員", "確認藥師負責監製業務範圍"],
+  },
+  {
+    id: "named-patient-import",
+    pcode: "L0030084",
+    level: "授權子法",
+    parentId: "drug-act",
+    title: "特定藥物專案核准製造及輸入辦法",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030084",
+    productTypes: ["prescription_drug", "cell_therapy"],
+    roles: ["進口代理商", "研發藥廠"],
+    lawTypes: ["查驗登記"],
+    activities: ["專案申請", "專案核准", "引入", "輸入"],
+    article: "第2條",
+    articleText:
+      "教學醫院申請特定藥物專案核准，應載明為預防、診治危及生命或嚴重失能之疾病，且國內尚無適當藥品或合適替代療法之意旨，並檢附診斷證明書、人體研究倫理審查委員會核准證明及完整治療計畫書。",
+    plain:
+      "如果產品還沒完成正式查驗登記，但用於治療國內沒有其他合適藥物可用的危及生命或嚴重失能疾病，可以由教學醫院或藥商走「專案核准」的特殊管道申請製造或輸入，不用等一般查驗登記走完。",
+    checklist: ["確認是否符合國內無適當替代療法之要件", "準備診斷證明書與治療計畫書", "確認申請人資格（教學醫院或藥商）"],
+  },
+  {
+    id: "rare-disease-registration",
+    pcode: "L0030032",
+    level: "授權子法",
+    parentId: "rare-disease-act",
+    title: "罕見疾病藥物查驗登記審查準則",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030032",
+    productTypes: ["prescription_drug", "cell_therapy"],
+    roles: ["進口代理商", "研發藥廠"],
+    lawTypes: ["查驗登記"],
+    activities: ["查驗登記", "罕見疾病"],
+    article: "第2條",
+    articleText:
+      "申請罕見疾病藥物查驗登記，應填具申請書並繳交審查費，檢附標籤、仿單及證照、相關療效品質及安全性資料；申請輸入者，另須檢附原產國家核准製售及原廠授權登記之證明文件。",
+    plain:
+      "罕見疾病藥物查驗登記要準備的送審資料跟一般藥品不同，如果是輸入案，還需要額外檢附原產國核准製售證明，資料清單要照這份準則的規定準備。",
+    checklist: ["準備標籤、仿單及證照", "準備療效、品質及安全性資料", "輸入案須準備原產國核准製售證明"],
+  },
+  {
+    id: "rare-disease-special-application",
+    pcode: "L0030030",
+    level: "授權子法",
+    parentId: "rare-disease-act",
+    title: "罕見疾病藥物專案申請辦法",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030030",
+    productTypes: ["prescription_drug", "cell_therapy"],
+    roles: ["進口代理商", "研發藥廠"],
+    lawTypes: ["查驗登記"],
+    activities: ["專案申請", "罕見疾病", "引入", "輸入"],
+    article: "第2條",
+    articleText:
+      "罕見疾病藥物未經查驗登記，或持有許可證者無法供應，或該藥物售價經中央主管機關認定顯不合理時，其製造或輸入得由政府機關、醫療機構、罕見疾病病人與家屬及相關基金會、學會、協會，專案申請中央主管機關許可。",
+    plain:
+      "如果罕見疾病藥物根本還沒在台灣完成查驗登記，或原本有許可證的廠商供應不上，病患端或醫療機構可以走專案申請管道取得藥物，不用等代理商完成正式查驗登記。",
+    checklist: ["確認是否符合未查驗登記/供應不足/售價不合理其中一項要件", "確認申請人資格", "準備專案申請文件送中央主管機關"],
+  },
+  {
+    id: "rare-disease-incentive",
+    pcode: "L0030029",
+    level: "授權子法",
+    parentId: "rare-disease-act",
+    title: "罕見疾病藥物供應製造及研究發展獎勵辦法",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030029",
+    productTypes: ["prescription_drug", "cell_therapy"],
+    roles: ["進口代理商", "研發藥廠", "代工藥廠"],
+    lawTypes: ["查驗登記"],
+    activities: ["獎勵", "引進", "供應", "罕見疾病"],
+    article: "第2條",
+    articleText:
+      "引進罕見疾病藥物、將罕見疾病藥物列入處方集，或專案申請罕見疾病藥物，對罕見疾病藥物之供應著有貢獻者，得依本辦法申請獎勵。",
+    plain:
+      "代理商或藥廠如果對罕見疾病藥物的引進、供應或研發有貢獻，可以另外申請政府獎勵，這是額外的誘因機制，跟查驗登記本身無關但值得評估。",
+    checklist: ["確認是否符合申請獎勵之貢獻情形", "準備申請獎勵所需佐證文件"],
+  },
 ];
 
 const pipelineSteps = [
@@ -317,6 +423,8 @@ function extractFacts(payload) {
   addIf(activities, "物流", matchAny(text, ["物流", "運輸", "配送", "倉儲", "gdp", "冷鏈"]));
   addIf(activities, "供應來源與流向", matchAny(text, ["來源", "流向", "保存", "追蹤"]));
   addIf(activities, "罕見疾病", matchAny(text, ["罕見疾病", "罕病", "孤兒藥", "orphan"]));
+  addIf(activities, "管制藥品", matchAny(text, ["管制藥品", "麻醉藥品", "影響精神藥物", "影響精神藥品", "毒品"]));
+  addIf(activities, "專案申請", matchAny(text, ["專案核准", "專案申請", "恩慈", "compassionate", "尚無合適替代療法"]));
   if (activities.length === 0) activities.push("引入", "上市", "查驗登記");
 
   const missingFacts = [];
