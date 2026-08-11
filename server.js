@@ -135,20 +135,56 @@ const LAW_INDEX = [
   },
   {
     id: "gdp",
-    pcode: "TFDA-GDP",
-    level: "實務規範",
-    title: "藥品優良運銷規範 GDP",
-    url: "https://www.fda.gov.tw/",
+    pcode: "L0030086",
+    level: "授權子法",
+    parentId: "drug-act",
+    title: "西藥優良運銷準則",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030086",
     productTypes: ["prescription_drug", "otc_drug", "general_drug", "cell_therapy"],
     roles: ["進口代理商", "供應鏈物流"],
     lawTypes: ["運輸 GDP"],
     activities: ["運輸", "物流", "倉儲", "配送", "冷鏈"],
-    article: "GDP",
+    article: "第2條",
     articleText:
-      "藥品運銷應確保儲存、運輸、配送與追溯過程維持品質，包含溫控、紀錄、委外管理與異常處理。",
+      "執行西藥批發、輸入及輸出之業者，其品質管理應符合附表一品質管理基準之規定。",
     plain:
       "代理商和物流團隊要證明運輸過程不破壞品質，尤其是冷鏈、溫度紀錄、委外物流和異常處理。",
     checklist: ["確認倉儲與運輸條件", "建立溫度紀錄", "確認委外物流責任", "建立異常與召回流程"],
+  },
+  {
+    id: "gmp-factory",
+    pcode: "L0030008",
+    level: "授權子法",
+    parentId: "drug-act",
+    title: "藥物製造工廠設廠標準",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030008",
+    productTypes: ["prescription_drug", "otc_drug", "general_drug", "cell_therapy"],
+    roles: ["代工藥廠", "原料藥廠", "研發藥廠"],
+    lawTypes: ["生產 GMP"],
+    activities: ["製造", "設廠", "廠房", "GMP"],
+    article: "第2條",
+    articleText:
+      "藥物製造工廠或場所之設備及衛生條件，應符合本標準之規定；本標準未規定者，依其他有關法令之規定。",
+    plain:
+      "要在台灣新設或擴建藥物製造工廠，廠房設備與衛生條件必須先符合這份設廠標準，這跟日常 GMP 品質管理是分開的門檻，設廠前就要確認。",
+    checklist: ["確認廠房設備是否符合設廠標準", "確認衛生條件是否符合規定", "查核本標準未涵蓋事項對應之其他法令"],
+  },
+  {
+    id: "rare-disease-act",
+    pcode: "L0030003",
+    level: "母法",
+    title: "罕見疾病防治及藥物法",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0030003",
+    productTypes: ["prescription_drug", "cell_therapy"],
+    roles: ["進口代理商", "研發藥廠", "代工藥廠"],
+    lawTypes: ["查驗登記"],
+    activities: ["查驗登記", "上市", "引入", "罕見疾病"],
+    article: "第3條第2項、第15條",
+    articleText:
+      "本法所稱罕見疾病藥物，指依本法提出申請，經審議會審議認定，並經中央主管機關公告，其主要適應症用於預防、診斷、治療罕見疾病者；主要適應症用於預防、診斷或治療罕見疾病者，得申請查驗登記為罕見疾病藥物。",
+    plain:
+      "如果產品的主要適應症是預防、診斷或治療罕見疾病，可以申請認定為罕見疾病藥物，走專屬的查驗登記管道，跟一般藥品查驗登記是不同的申請路徑。",
+    checklist: ["確認適應症是否符合罕見疾病藥物認定條件", "向審議會提出罕見疾病藥物認定申請", "依罕見疾病藥物專屬管道辦理查驗登記"],
   },
 ];
 
@@ -609,6 +645,7 @@ function extractFacts(payload) {
   addIf(activities, "製造", matchAny(text, ["製造", "生產", "代工", "gmp"]));
   addIf(activities, "物流", matchAny(text, ["物流", "運輸", "配送", "倉儲", "gdp", "冷鏈"]));
   addIf(activities, "供應來源與流向", matchAny(text, ["來源", "流向", "保存", "追蹤"]));
+  addIf(activities, "罕見疾病", matchAny(text, ["罕見疾病", "罕病", "孤兒藥", "orphan"]));
   if (activities.length === 0) activities.push("引入", "上市", "查驗登記");
 
   const missingFacts = [];
