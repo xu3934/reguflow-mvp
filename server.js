@@ -259,11 +259,12 @@ async function analyzeWithPipeline(payload) {
     if (allLawTexts.length > 20000) allLawTexts = allLawTexts.slice(0, 20000);
 
     const role = facts.role;
+    const scenario = facts.rawScenario;
 
     // Step 3f: Run Prompt C and Prompt D in parallel
     const [resultC, resultD] = await Promise.allSettled([
-      runPromptC(allLawTexts, role),
-      runPromptD(allLawTexts, role),
+      runPromptC(allLawTexts, role, scenario),
+      runPromptD(allLawTexts, role, scenario),
     ]);
 
     const promptCData = resultC.status === "fulfilled" ? resultC.value : null;
@@ -373,12 +374,15 @@ ${motherLawText}
 // Prompt C — applicable laws + summary + checklist + missing facts
 // ---------------------------------------------------------------------------
 
-async function runPromptC(allLawTexts, role) {
-  const input = `以下是與本案相關的法規全文：
+async function runPromptC(allLawTexts, role, scenario) {
+  const input = `以下是使用者實際描述的情境與需求：
+${scenario || "（使用者未提供詳細描述）"}
+
+以下是與本案相關的法規全文：
 
 ${allLawTexts}
 
-請根據以上法規內容，針對角色「${role}」，輸出以下 JSON 格式的分析結果：
+請根據以上法規內容，並緊扣使用者描述的實際情境與需求，針對角色「${role}」，輸出以下 JSON 格式的分析結果：
 {
   "applicable_laws": [
     {
@@ -398,7 +402,7 @@ ${allLawTexts}
 
   const text = await callOpenAI({
     instructions:
-      "你是台灣生醫法規顧問，專為 BD、PM、RA、QA 及物流人員撰寫法規摘要。只根據提供的法規內容作答，不得虛構法條或引用。只輸出 JSON。",
+      "你是台灣生醫法規顧問，專為 BD、PM、RA、QA 及物流人員撰寫法規摘要。只根據提供的法規內容作答，不得虛構法條或引用，但摘要與 Checklist 必須針對使用者描述的具體情境客製化，不要只是複述通用法規概要。只輸出 JSON。",
     input,
   });
 
@@ -409,12 +413,15 @@ ${allLawTexts}
 // Prompt D — process stages (exactly 3 stages)
 // ---------------------------------------------------------------------------
 
-async function runPromptD(allLawTexts, role) {
-  const input = `以下是與本案相關的法規全文：
+async function runPromptD(allLawTexts, role, scenario) {
+  const input = `以下是使用者實際描述的情境與需求：
+${scenario || "（使用者未提供詳細描述）"}
+
+以下是與本案相關的法規全文：
 
 ${allLawTexts}
 
-請根據以上法規內容，針對角色「${role}」，輸出恰好 3 個作業階段的 JSON 陣列，每個階段包含：
+請根據以上法規內容，並緊扣使用者描述的實際情境與需求，針對角色「${role}」，輸出恰好 3 個作業階段的 JSON 陣列，每個階段包含：
 - stage_title: 階段名稱（例如「【源頭管理】供應來源確認」）
 - law_name: 該階段依據的主要法規名稱
 - control_points: 該階段的查核重點（字串陣列）

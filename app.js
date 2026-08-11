@@ -532,13 +532,14 @@ function setCheckedLawTypes(values) {
 function setModeBadge(label, mode) {
   modeBadge.textContent = label;
   modeBadge.classList.remove("api-on", "api-off", "api-error");
-  if (mode === "openai") modeBadge.classList.add("api-on");
+  if (mode === "openai" || mode === "pipeline") modeBadge.classList.add("api-on");
   else if (mode === "api_failed_fallback" || mode === "ai_failed_fallback") modeBadge.classList.add("api-error");
   else modeBadge.classList.add("api-off");
 }
 
 function getModeLabel(mode) {
   return {
+    pipeline: "AI Pipeline (法務部即時串接)",
     ai_pipeline: "AI Pipeline (法務部即時串接)",
     openai: "OpenAI API",
     local_fallback: "Local fallback",
