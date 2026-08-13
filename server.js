@@ -550,6 +550,17 @@ async function analyzeWithPipeline(payload) {
       localReport.process_stages
     );
 
+    const direct_answers = promptCData && Array.isArray(promptCData.direct_answers)
+      ? promptCData.direct_answers
+          .filter((a) => a && typeof a === "object" && a.question && a.answer)
+          .slice(0, 6)
+          .map((a) => ({
+            question: String(a.question),
+            answer: String(a.answer),
+            grounding: ["law", "nhi_data", "not_available"].includes(a.grounding) ? a.grounding : "not_available",
+          }))
+      : [];
+
     return {
       mode: "pipeline",
       model: OPENAI_MODEL,
@@ -563,6 +574,7 @@ async function analyzeWithPipeline(payload) {
       process_stages,
       traceability: buildTraceability(assessments),
       nhi_competitors: nhiCompetitors,
+      direct_answers,
     };
   } catch (err) {
     return { ...localReport, mode: "ai_failed_fallback", aiError: err.message };
@@ -775,8 +787,13 @@ ${allLawTexts}${competitorText || ""}
   ],
   "summary_points": ["重點摘要1", "重點摘要2"],
   "checklist": ["查核項目1", "查核項目2"],
-  "missing_facts": ["尚缺資訊1", "尚缺資訊2"]
+  "missing_facts": ["尚缺資訊1", "尚缺資訊2"],
+  "direct_answers": [
+    {"question": "使用者實際提出的問題", "answer": "回答內容", "grounding": "law | nhi_data | not_available"}
+  ]
 }
+
+direct_answers 的規則：請先從使用者的情境描述中辨識出他「實際想問的問題」（可能不只一個，也可能與本模板預設的欄位無關），逐題回答。能用上方法規全文回答的，grounding 標 "law"；能用上方健保署品項資料回答的，標 "nhi_data"；系統提供的資料無法回答的（例如市場規模、未提供的競品細節、商業數據），標 "not_available"，並在 answer 中明確說明無法回答的原因與建議的查詢管道，嚴禁編造數字或品項。
 
 只輸出 JSON，不要有其他說明。`;
 

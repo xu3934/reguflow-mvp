@@ -478,6 +478,50 @@ input[type="text"] {
   grid-column: 1 / -1;
 }
 
+.answers-list {
+  display: grid;
+  gap: 12px;
+}
+
+.answer-item {
+  border: 1px solid #e3ece8;
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: #fbfdfc;
+}
+
+.answer-question {
+  font-weight: 700;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.answer-grounding {
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+
+.grounding-law {
+  background: #e3f2e9;
+  color: #1e6b43;
+}
+
+.grounding-data {
+  background: #e4eef8;
+  color: #1e4f7a;
+}
+
+.grounding-na {
+  background: #f4ede0;
+  color: #8a6116;
+}
+
 .summary-copy {
   display: grid;
   gap: 16px;

@@ -641,6 +641,7 @@ function calculateOverallConfidence(assessments) {
 function renderReport(report) {
   const modeLabel = getModeLabel(report.mode);
   setModeBadge(modeLabel, report.mode);
+  renderDirectAnswers(report.direct_answers);
   document.querySelector("#confidenceScore").textContent = `${report.confidence}% grounded`;
 
   document.querySelector("#applicableLaws").innerHTML = report.applicable_laws
@@ -686,6 +687,39 @@ function renderTraceRow(row) {
     <td>${translateApplicability(row.applicability)}</td>
     <td class="${row.confidence >= 0.72 ? "confidence-high" : "confidence-medium"}">${Math.round(row.confidence * 100)}%</td>
   </tr>`;
+}
+
+function renderDirectAnswers(answers) {
+  const card = document.querySelector("#answersCard");
+  const list = document.querySelector("#directAnswers");
+  const valid = Array.isArray(answers)
+    ? answers.filter((a) => a && a.question && a.answer)
+    : [];
+
+  if (!valid.length) {
+    card.classList.add("hidden");
+    return;
+  }
+
+  list.innerHTML = valid
+    .map(
+      (a) => `<div class="answer-item">
+        <p class="answer-question">${escapeHtml(a.question)} ${groundingBadge(a.grounding)}</p>
+        <p>${escapeHtml(a.answer)}</p>
+      </div>`
+    )
+    .join("");
+  card.classList.remove("hidden");
+}
+
+function groundingBadge(grounding) {
+  const map = {
+    law: ["法規依據", "grounding-law"],
+    nhi_data: ["健保署資料", "grounding-data"],
+    not_available: ["超出資料範圍", "grounding-na"],
+  };
+  const [label, cls] = map[grounding] || ["未標注來源", "grounding-na"];
+  return `<span class="answer-grounding ${cls}">${label}</span>`;
 }
 
 async function renderNhiCompetitors(manualQuery, report) {
