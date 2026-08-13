@@ -393,7 +393,7 @@ analyzeButton.addEventListener("click", async () => {
   const payload = collectPayload(scenario);
   const report = await analyzeScenarioWithApiFallback(payload);
   renderReport(report);
-  renderNhiCompetitors(nhiQueryInput.value.trim());
+  renderNhiCompetitors(nhiQueryInput.value.trim(), report);
 
   progressSection.classList.add("hidden");
   results.classList.remove("hidden");
@@ -688,47 +688,63 @@ function renderTraceRow(row) {
   </tr>`;
 }
 
-async function renderNhiCompetitors(query) {
+async function renderNhiCompetitors(manualQuery, report) {
+  const card = document.querySelector("#nhiCard");
+
+  if (location.protocol === "file:") {
+    card.classList.add("hidden");
+    return;
+  }
+
+  // Manual query overrides; otherwise use what the AI pipeline extracted.
+  if (manualQuery) {
+    try {
+      const response = await fetch(`/api/v1/nhi-drugs?q=${encodeURIComponent(manualQuery)}`);
+      if (!response.ok) throw new Error(`NHI query failed: ${response.status}`);
+      const data = await response.json();
+      if (data.error === "snapshot_missing") {
+        card.classList.add("hidden");
+        return;
+      }
+      renderNhiCard(data.meta, data.items, manualQuery, "手動");
+    } catch {
+      card.classList.add("hidden");
+    }
+    return;
+  }
+
+  const auto = report && report.nhi_competitors;
+  if (auto && auto.meta) {
+    renderNhiCard(auto.meta, auto.items || [], auto.query, "AI 自動判讀");
+    return;
+  }
+
+  card.classList.add("hidden");
+}
+
+function renderNhiCard(metaInfo, items, query, queryMode) {
   const card = document.querySelector("#nhiCard");
   const rows = document.querySelector("#nhiRows");
   const meta = document.querySelector("#nhiMeta");
   const provenance = document.querySelector("#nhiProvenance");
 
-  if (!query || location.protocol === "file:") {
-    card.classList.add("hidden");
-    return;
-  }
-
-  try {
-    const response = await fetch(`/api/v1/nhi-drugs?q=${encodeURIComponent(query)}`);
-    if (!response.ok) throw new Error(`NHI query failed: ${response.status}`);
-    const data = await response.json();
-
-    if (data.error === "snapshot_missing") {
-      card.classList.add("hidden");
-      return;
-    }
-
-    meta.textContent = `${data.items.length} 筆`;
-    rows.innerHTML = data.items.length
-      ? data.items
-          .map(
-            (item) => `<tr>
-              <td>${escapeHtml(item.zh)}<br /><span class="hint-text">${escapeHtml(item.en)}</span></td>
-              <td>${escapeHtml(item.ing)}</td>
-              <td>${escapeHtml(item.form)}</td>
-              <td>${escapeHtml(item.price)}</td>
-              <td>${escapeHtml(item.vendor)}</td>
-              <td>${escapeHtml(item.atc)}</td>
-            </tr>`
-          )
-          .join("")
-      : `<tr><td colspan="6">查無符合「${escapeHtml(query)}」的現行收載品項，請改用主成分英文（INN）或 ATC 碼開頭字串。</td></tr>`;
-    provenance.textContent = `資料來源：${data.meta.source}（快照日期 ${data.meta.generatedAt}，現行有效品項共 ${data.meta.count} 筆，最多顯示 30 筆）。支付價為健保支付價格，非市場售價。`;
-    card.classList.remove("hidden");
-  } catch {
-    card.classList.add("hidden");
-  }
+  meta.textContent = `${items.length} 筆｜${query}`;
+  rows.innerHTML = items.length
+    ? items
+        .map(
+          (item) => `<tr>
+            <td>${escapeHtml(item.zh)}<br /><span class="hint-text">${escapeHtml(item.en)}</span></td>
+            <td>${escapeHtml(item.ing)}</td>
+            <td>${escapeHtml(item.form)}</td>
+            <td>${escapeHtml(item.price)}</td>
+            <td>${escapeHtml(item.vendor)}</td>
+            <td>${escapeHtml(item.atc)}</td>
+          </tr>`
+        )
+        .join("")
+    : `<tr><td colspan="6">查無符合「${escapeHtml(query)}」的現行收載品項，請於「競品查詢」欄改用主成分英文（INN）或 ATC 碼開頭字串。</td></tr>`;
+  provenance.textContent = `${queryMode}查詢詞「${query}」。資料來源：${metaInfo.source}（快照日期 ${metaInfo.generatedAt}，現行有效品項共 ${metaInfo.count} 筆，最多顯示 30 筆）。支付價為健保支付價格，非市場售價。`;
+  card.classList.remove("hidden");
 }
 
 async function checkApiHealth() {

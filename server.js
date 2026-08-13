@@ -448,13 +448,15 @@ async function analyzeWithPipeline(payload) {
   if (!OPENAI_API_KEY) return localReport;
 
   try {
-    // Step 3a: Prompt A — identify mother law PCode
+    // Step 3a: Prompt A — identify mother law PCode + competitor query
     let pcode;
     let motherLawName;
+    let competitorQuery = "";
     try {
       const promptAResult = await runPromptA(payload);
       pcode = promptAResult.pcode;
       motherLawName = promptAResult.law_name || "";
+      competitorQuery = typeof promptAResult.competitor_query === "string" ? promptAResult.competitor_query.trim() : "";
     } catch (err) {
       // Fallback to top assessment law
       const topAssessment = assessments[0];
@@ -499,9 +501,26 @@ async function analyzeWithPipeline(payload) {
     const scenario = facts.rawScenario;
     const profile = ROLE_PROFILES[facts.jobFunction] || null;
 
+    // Step 3e-2: Look up NHI-reimbursed competitors using the query Prompt A
+    // extracted, and prepare a grounded data block for Prompt C.
+    let nhiCompetitors = null;
+    if (competitorQuery && competitorQuery.length >= 2) {
+      const searchResult = searchNhiDrugs(competitorQuery);
+      if (!searchResult.error) {
+        nhiCompetitors = { query: competitorQuery, meta: searchResult.meta, items: searchResult.items };
+      }
+    }
+    let competitorText = "";
+    if (nhiCompetitors && nhiCompetitors.items.length > 0) {
+      const lines = nhiCompetitors.items
+        .slice(0, 10)
+        .map((i) => `- ${i.zh}（${i.en}）｜成分 ${i.ing}｜劑型 ${i.form}｜健保支付價 ${i.price}｜藥商 ${i.vendor}｜ATC ${i.atc}`);
+      competitorText = `\n\n以下是健保署開放資料「健保用藥品項檔」（快照日期 ${nhiCompetitors.meta.generatedAt}）中查得的同類已收載品項，引用競品給付現況時只能使用下列品項與數字，不得自行補充其他品項或價格：\n${lines.join("\n")}`;
+    }
+
     // Step 3f: Run Prompt C and Prompt D in parallel
     const [resultC, resultD] = await Promise.allSettled([
-      runPromptC(allLawTexts, role, scenario, profile),
+      runPromptC(allLawTexts, role, scenario, profile, competitorText),
       runPromptD(allLawTexts, role, scenario, profile),
     ]);
 
@@ -543,6 +562,7 @@ async function analyzeWithPipeline(payload) {
       summary_and_checklist,
       process_stages,
       traceability: buildTraceability(assessments),
+      nhi_competitors: nhiCompetitors,
     };
   } catch (err) {
     return { ...localReport, mode: "ai_failed_fallback", aiError: err.message };
@@ -665,14 +685,18 @@ async function runPromptA(payload) {
     .map((l) => `- ${l.title} (PCode: ${l.pcode})`)
     .join("\n");
 
-  const input = `請分析使用者的情境：'${userIntent}'，並參考其角色定位 '${role}' 與法規類型 '${lawType}'，判斷其對應的台灣生醫法規 PCode。請嚴格以 JSON 格式輸出：{"pcode": "法規代碼", "law_name": "母法名稱"}。
+  const input = `請分析使用者的情境：'${userIntent}'，並參考其角色定位 '${role}' 與法規類型 '${lawType}'，判斷其對應的台灣生醫法規 PCode。
+
+另外，若情境提及具體藥品類別、成分或適應症，請輸出一個可用於台灣健保用藥品項檔查詢的字串 competitor_query：優先使用 ATC 分類碼前綴（例如降血糖藥→A10、降血壓藥→C02、抗腫瘤藥→L01），或英文主成分名（INN，例如 PEMBROLIZUMAB）。無法判斷時輸出空字串。
+
+請嚴格以 JSON 格式輸出：{"pcode": "法規代碼", "law_name": "母法名稱", "competitor_query": "ATC碼前綴或英文成分名或空字串"}。
 
 以下為依語意相關性排序、最可能相關的母法清單供參考：
 ${lawListText}`;
 
   const text = await callOpenAI({
     instructions:
-      "你是台灣生醫法規專家。請根據使用者情境判斷最相關的母法 PCode，只輸出 JSON，不要有其他說明。",
+      "你是台灣生醫法規專家。請根據使用者情境判斷最相關的母法 PCode 與健保品項查詢字串，只輸出 JSON，不要有其他說明。",
     input,
   });
 
@@ -714,14 +738,14 @@ ${motherLawText}
 // Prompt C — applicable laws + summary + checklist + missing facts
 // ---------------------------------------------------------------------------
 
-async function runPromptC(allLawTexts, role, scenario, profile) {
+async function runPromptC(allLawTexts, role, scenario, profile, competitorText) {
   const roleLabel = profile ? `${role}（${profile.label} 視角）` : role;
   const input = `以下是使用者實際描述的情境與需求：
 ${scenario || "（使用者未提供詳細描述）"}
 
 以下是與本案相關的法規全文：
 
-${allLawTexts}
+${allLawTexts}${competitorText || ""}
 
 請根據以上法規內容，並緊扣使用者描述的實際情境與需求，針對角色「${roleLabel}」，輸出以下 JSON 格式的分析結果：
 {
