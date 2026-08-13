@@ -592,17 +592,32 @@ function searchNhiDrugs(q) {
   if (!snapshot) return { error: "snapshot_missing", items: [] };
   if (!q || q.length < 2) return { meta: snapshot.meta, items: [], note: "query_too_short" };
   const upper = q.toUpperCase();
-  const items = [];
+  const matches = [];
   for (const item of snapshot.items) {
+    // Items with a 0.00 payment price have no effective NHI price and are
+    // useless as competitor pricing references — skip them.
+    const price = parseFloat(item.price);
+    if (!Number.isFinite(price) || price <= 0) continue;
     if (
       (item.atc && item.atc.toUpperCase().startsWith(upper)) ||
       (item.ing && item.ing.toUpperCase().includes(upper)) ||
       (item.en && item.en.toUpperCase().includes(upper)) ||
       (item.zh && item.zh.includes(q))
     ) {
-      items.push(item);
-      if (items.length >= 30) break;
+      matches.push({ item, price });
     }
+  }
+  // Highest price first: newer originator drugs surface before legacy
+  // generics, which matches the competitor-pricing use case.
+  matches.sort((a, b) => b.price - a.price);
+  const seen = new Set();
+  const items = [];
+  for (const match of matches) {
+    const key = `${match.item.zh}|${match.item.ing}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push(match.item);
+    if (items.length >= 30) break;
   }
   return { meta: snapshot.meta, items };
 }

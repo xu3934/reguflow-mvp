@@ -743,7 +743,7 @@ function renderNhiCard(metaInfo, items, query, queryMode) {
         )
         .join("")
     : `<tr><td colspan="6">查無符合「${escapeHtml(query)}」的現行收載品項，請於「競品查詢」欄改用主成分英文（INN）或 ATC 碼開頭字串。</td></tr>`;
-  provenance.textContent = `${queryMode}查詢詞「${query}」。資料來源：${metaInfo.source}（快照日期 ${metaInfo.generatedAt}，現行有效品項共 ${metaInfo.count} 筆，最多顯示 30 筆）。支付價為健保支付價格，非市場售價。`;
+  provenance.textContent = `${queryMode}查詢詞「${query}」。資料來源：${metaInfo.source}（快照日期 ${metaInfo.generatedAt}，現行有效品項共 ${metaInfo.count} 筆）。已排除無現行支付價之品項，按支付價由高至低最多顯示 30 筆；支付價為健保支付價格，非市場售價。`;
   card.classList.remove("hidden");
 }
 
