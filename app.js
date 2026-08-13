@@ -285,6 +285,59 @@ const LAW_INDEX = [
       "代理商或藥廠如果對罕見疾病藥物的引進、供應或研發有貢獻，可以另外申請政府獎勵，這是額外的誘因機制，跟查驗登記本身無關但值得評估。",
     checklist: ["確認是否符合申請獎勵之貢獻情形", "準備申請獎勵所需佐證文件"],
   },
+  {
+    id: "nhi-act",
+    pcode: "L0060001",
+    level: "母法",
+    title: "全民健康保險法",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0060001",
+    productTypes: ["prescription_drug", "otc_drug", "general_drug", "cell_therapy"],
+    roles: ["進口代理商", "研發藥廠", "代工藥廠"],
+    lawTypes: ["健保給付"],
+    activities: ["健保給付", "上市"],
+    article: "第41條",
+    articleText:
+      "藥物給付項目及支付標準，由保險人與相關機關、專家學者、被保險人、雇主、保險醫事服務提供者等代表共同擬訂，並得邀請藥物提供者及相關專家、病友等團體代表表示意見，報主管機關核定發布。",
+    plain:
+      "新藥要進健保給付，程序是由健保署召集各方代表共同擬訂給付項目與支付標準，藥廠（藥物提供者）可在會議表示意見，最後報衛福部核定發布——這是健保收載程序的法源。",
+    checklist: ["確認取得藥證後啟動健保收載申請", "準備向共同擬訂會議表達意見之資料", "追蹤主管機關核定進度"],
+  },
+  {
+    id: "nhi-drug-payment",
+    pcode: "L0060035",
+    level: "授權子法",
+    parentId: "nhi-act",
+    title: "全民健康保險藥物給付項目及支付標準",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0060035",
+    productTypes: ["prescription_drug", "otc_drug", "general_drug", "cell_therapy"],
+    roles: ["進口代理商", "研發藥廠"],
+    lawTypes: ["健保給付"],
+    activities: ["健保給付", "上市"],
+    article: "第17條、第38條",
+    articleText:
+      "新藥支付價格依類別參考十國藥價核算：第一類新藥以十國藥價中位數核價；第二類新藥以十國藥價中位數為上限，得採十國藥價最低價或原產國藥價等方法核價。十國藥價指英國、德國、日本、瑞士、美國、比利時、澳洲、法國、瑞典、加拿大之藥價換算取得。",
+    plain:
+      "健保新藥核價直接參考十大先進國藥價：突破創新的第一類新藥用十國中位數，其他類別以中位數為上限、可能以十國最低價或原產國價核定——所以定價策略要先盤點產品在這十國的實際售價。",
+    checklist: ["盤點產品於十國（英德日瑞士美比澳法瑞典加）之現行售價", "評估新藥類別對核價方法的影響", "查詢同類已收載藥品之支付價格（健保署公開資料）"],
+  },
+  {
+    id: "drug-ad",
+    pcode: "L0030001",
+    level: "母法專章",
+    parentId: "drug-act",
+    title: "藥事法第七章：藥物廣告之管理",
+    url: "https://law.moj.gov.tw/LawClass/LawParaDeatil.aspx?pcode=L0030001&bp=8",
+    productTypes: ["prescription_drug", "otc_drug", "general_drug", "cell_therapy"],
+    roles: ["進口代理商", "研發藥廠", "代工藥廠"],
+    lawTypes: ["廣告與衛教"],
+    activities: ["廣告", "衛教", "宣傳", "行銷"],
+    article: "第65、66、68、69條",
+    articleText:
+      "非藥商不得為藥物廣告；藥商刊播藥物廣告應於刊播前將所有文字、圖畫或言詞申請衛生主管機關核准；藥物廣告不得假借他人名義宣傳、利用書刊資料保證效能、藉採訪或報導宣傳或以其他不正當方式宣傳；非藥物不得為醫療效能之標示或宣傳。",
+    plain:
+      "藥物廣告採事前審查制：只有藥商能打藥物廣告，而且刊播前就要把完整文字圖像送衛生主管機關核准；誇大宣傳、藉報導帶風向都被明文禁止。衛教材料若涉及醫療效能宣稱，也可能被認定為廣告而受同樣規範。",
+    checklist: ["確認廣告刊播前已取得主管機關核准文件", "檢視廣告內容無誇大或藉報導宣傳情事", "確認衛教材料未涉未經核准之醫療效能宣稱"],
+  },
 ];
 
 const pipelineSteps = [
@@ -300,6 +353,7 @@ const scenarioInput = document.querySelector("#scenario");
 const productTypeInput = document.querySelector("#productType");
 const roleInput = document.querySelector("#role");
 const jobFunctionInput = document.querySelector("#jobFunction");
+const nhiQueryInput = document.querySelector("#nhiQuery");
 const marketInput = document.querySelector("#market");
 const analyzeButton = document.querySelector("#analyze");
 const loadDemoButton = document.querySelector("#loadDemo");
@@ -339,6 +393,7 @@ analyzeButton.addEventListener("click", async () => {
   const payload = collectPayload(scenario);
   const report = await analyzeScenarioWithApiFallback(payload);
   renderReport(report);
+  renderNhiCompetitors(nhiQueryInput.value.trim());
 
   progressSection.classList.add("hidden");
   results.classList.remove("hidden");
@@ -428,6 +483,8 @@ function extractFacts(payload) {
   addIf(activities, "罕見疾病", matchAny(text, ["罕見疾病", "罕病", "孤兒藥", "orphan"]));
   addIf(activities, "管制藥品", matchAny(text, ["管制藥品", "麻醉藥品", "影響精神藥物", "影響精神藥品", "毒品"]));
   addIf(activities, "專案申請", matchAny(text, ["專案核准", "專案申請", "恩慈", "compassionate", "尚無合適替代療法"]));
+  addIf(activities, "健保給付", matchAny(text, ["健保", "給付", "收載", "藥價", "支付標準", "核價"]));
+  addIf(activities, "廣告", matchAny(text, ["廣告", "衛教", "宣傳", "行銷", "推廣"]));
   if (activities.length === 0) activities.push("引入", "上市", "查驗登記");
 
   const missingFacts = [];
@@ -629,6 +686,49 @@ function renderTraceRow(row) {
     <td>${translateApplicability(row.applicability)}</td>
     <td class="${row.confidence >= 0.72 ? "confidence-high" : "confidence-medium"}">${Math.round(row.confidence * 100)}%</td>
   </tr>`;
+}
+
+async function renderNhiCompetitors(query) {
+  const card = document.querySelector("#nhiCard");
+  const rows = document.querySelector("#nhiRows");
+  const meta = document.querySelector("#nhiMeta");
+  const provenance = document.querySelector("#nhiProvenance");
+
+  if (!query || location.protocol === "file:") {
+    card.classList.add("hidden");
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/v1/nhi-drugs?q=${encodeURIComponent(query)}`);
+    if (!response.ok) throw new Error(`NHI query failed: ${response.status}`);
+    const data = await response.json();
+
+    if (data.error === "snapshot_missing") {
+      card.classList.add("hidden");
+      return;
+    }
+
+    meta.textContent = `${data.items.length} 筆`;
+    rows.innerHTML = data.items.length
+      ? data.items
+          .map(
+            (item) => `<tr>
+              <td>${escapeHtml(item.zh)}<br /><span class="hint-text">${escapeHtml(item.en)}</span></td>
+              <td>${escapeHtml(item.ing)}</td>
+              <td>${escapeHtml(item.form)}</td>
+              <td>${escapeHtml(item.price)}</td>
+              <td>${escapeHtml(item.vendor)}</td>
+              <td>${escapeHtml(item.atc)}</td>
+            </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="6">查無符合「${escapeHtml(query)}」的現行收載品項，請改用主成分英文（INN）或 ATC 碼開頭字串。</td></tr>`;
+    provenance.textContent = `資料來源：${data.meta.source}（快照日期 ${data.meta.generatedAt}，現行有效品項共 ${data.meta.count} 筆，最多顯示 30 筆）。支付價為健保支付價格，非市場售價。`;
+    card.classList.remove("hidden");
+  } catch {
+    card.classList.add("hidden");
+  }
 }
 
 async function checkApiHealth() {

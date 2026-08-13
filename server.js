@@ -292,6 +292,59 @@ const LAW_INDEX = [
       "代理商或藥廠如果對罕見疾病藥物的引進、供應或研發有貢獻，可以另外申請政府獎勵，這是額外的誘因機制，跟查驗登記本身無關但值得評估。",
     checklist: ["確認是否符合申請獎勵之貢獻情形", "準備申請獎勵所需佐證文件"],
   },
+  {
+    id: "nhi-act",
+    pcode: "L0060001",
+    level: "母法",
+    title: "全民健康保險法",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0060001",
+    productTypes: ["prescription_drug", "otc_drug", "general_drug", "cell_therapy"],
+    roles: ["進口代理商", "研發藥廠", "代工藥廠"],
+    lawTypes: ["健保給付"],
+    activities: ["健保給付", "上市"],
+    article: "第41條",
+    articleText:
+      "藥物給付項目及支付標準，由保險人與相關機關、專家學者、被保險人、雇主、保險醫事服務提供者等代表共同擬訂，並得邀請藥物提供者及相關專家、病友等團體代表表示意見，報主管機關核定發布。",
+    plain:
+      "新藥要進健保給付，程序是由健保署召集各方代表共同擬訂給付項目與支付標準，藥廠（藥物提供者）可在會議表示意見，最後報衛福部核定發布——這是健保收載程序的法源。",
+    checklist: ["確認取得藥證後啟動健保收載申請", "準備向共同擬訂會議表達意見之資料", "追蹤主管機關核定進度"],
+  },
+  {
+    id: "nhi-drug-payment",
+    pcode: "L0060035",
+    level: "授權子法",
+    parentId: "nhi-act",
+    title: "全民健康保險藥物給付項目及支付標準",
+    url: "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0060035",
+    productTypes: ["prescription_drug", "otc_drug", "general_drug", "cell_therapy"],
+    roles: ["進口代理商", "研發藥廠"],
+    lawTypes: ["健保給付"],
+    activities: ["健保給付", "上市"],
+    article: "第17條、第38條",
+    articleText:
+      "新藥支付價格依類別參考十國藥價核算：第一類新藥以十國藥價中位數核價；第二類新藥以十國藥價中位數為上限，得採十國藥價最低價或原產國藥價等方法核價。十國藥價指英國、德國、日本、瑞士、美國、比利時、澳洲、法國、瑞典、加拿大之藥價換算取得。",
+    plain:
+      "健保新藥核價直接參考十大先進國藥價：突破創新的第一類新藥用十國中位數，其他類別以中位數為上限、可能以十國最低價或原產國價核定——所以定價策略要先盤點產品在這十國的實際售價。",
+    checklist: ["盤點產品於十國（英德日瑞士美比澳法瑞典加）之現行售價", "評估新藥類別對核價方法的影響", "查詢同類已收載藥品之支付價格（健保署公開資料）"],
+  },
+  {
+    id: "drug-ad",
+    pcode: "L0030001",
+    level: "母法專章",
+    parentId: "drug-act",
+    title: "藥事法第七章：藥物廣告之管理",
+    url: "https://law.moj.gov.tw/LawClass/LawParaDeatil.aspx?pcode=L0030001&bp=8",
+    productTypes: ["prescription_drug", "otc_drug", "general_drug", "cell_therapy"],
+    roles: ["進口代理商", "研發藥廠", "代工藥廠"],
+    lawTypes: ["廣告與衛教"],
+    activities: ["廣告", "衛教", "宣傳", "行銷"],
+    article: "第65、66、68、69條",
+    articleText:
+      "非藥商不得為藥物廣告；藥商刊播藥物廣告應於刊播前將所有文字、圖畫或言詞申請衛生主管機關核准；藥物廣告不得假借他人名義宣傳、利用書刊資料保證效能、藉採訪或報導宣傳或以其他不正當方式宣傳；非藥物不得為醫療效能之標示或宣傳。",
+    plain:
+      "藥物廣告採事前審查制：只有藥商能打藥物廣告，而且刊播前就要把完整文字圖像送衛生主管機關核准；誇大宣傳、藉報導帶風向都被明文禁止。衛教材料若涉及醫療效能宣稱，也可能被認定為廣告而受同樣規範。",
+    checklist: ["確認廣告刊播前已取得主管機關核准文件", "檢視廣告內容無誇大或藉報導宣傳情事", "確認衛教材料未涉未經核准之醫療效能宣稱"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -311,7 +364,7 @@ const ROLE_PROFILES = {
   PM: {
     label: "PM 產品經理",
     promptC:
-      "讀者是產品經理（PM）。每條法規都要回答：對上市時程、健保給付申請前提、適應症範圍的影響。例如藥品許可證是健保收載申請的前提，取證時程直接決定給付申請最早遞件時點；附款許可的條件可能影響給付範圍認定。Checklist 以商業決策為單位（確認取證時程回推收載遞件時點、盤點競品收載狀況、評估罕見疾病藥物認定對給付談判的影響），不是合規作業。缺漏事實聚焦競品收載狀況與療效及成本效益資料完備度。法規未涵蓋健保給付細節時，明確標示需另行確認，不得自行推論給付規定。",
+      "讀者是產品經理（PM）。每條法規都要回答：對上市時程、健保給付申請前提、適應症範圍的影響。例如藥品許可證是健保收載申請的前提，取證時程直接決定給付申請最早遞件時點；附款許可的條件可能影響給付範圍認定。若提供的法規包含全民健康保險法或藥物給付項目及支付標準，收載程序與核價規則（如十國藥價參考）應引用該法條說明。Checklist 以商業決策為單位（確認取證時程回推收載遞件時點、盤點競品收載狀況、評估罕見疾病藥物認定對給付談判的影響），不是合規作業。缺漏事實聚焦競品收載狀況與療效及成本效益資料完備度。競品實際收載品項與支付價格屬健保署公開資料而非法規內容，一律標示需另行查詢，不得自行推論具體品項或價格數字。",
     promptD:
       "三階段以產品上市視角切分：【取證階段】查驗登記與取證策略、【收載準備】健保給付申請前置作業、【上市後管理】給付範圍維護與市場監測。",
   },
@@ -348,6 +401,11 @@ const server = http.createServer(async (req, res) => {
         mode: OPENAI_API_KEY ? "pipeline_ready" : "local_fallback",
         pipeline: "A→Scrape→B→Scrape→C+D",
       });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/v1/nhi-drugs") {
+      const q = (url.searchParams.get("q") || "").trim();
+      return sendJson(res, 200, searchNhiDrugs(q));
     }
 
     if (req.method === "POST" && (url.pathname === "/api/v1/analyze" || url.pathname === "/api/analyze")) {
@@ -489,6 +547,44 @@ async function analyzeWithPipeline(payload) {
   } catch (err) {
     return { ...localReport, mode: "ai_failed_fallback", aiError: err.message };
   }
+}
+
+// ---------------------------------------------------------------------------
+// NHI drug snapshot — competitor / reimbursement lookup backed by the NHIA
+// open dataset (built by scripts/build-nhi-snapshot.js). Data, not law: the
+// endpoint always returns the dataset provenance so the UI can cite it.
+// ---------------------------------------------------------------------------
+
+let nhiSnapshotCache; // undefined = not loaded; null = missing/unreadable
+
+function loadNhiSnapshot() {
+  if (nhiSnapshotCache !== undefined) return nhiSnapshotCache;
+  try {
+    nhiSnapshotCache = JSON.parse(fs.readFileSync(path.join(__dirname, "data", "nhi-drugs.json"), "utf8"));
+  } catch {
+    nhiSnapshotCache = null;
+  }
+  return nhiSnapshotCache;
+}
+
+function searchNhiDrugs(q) {
+  const snapshot = loadNhiSnapshot();
+  if (!snapshot) return { error: "snapshot_missing", items: [] };
+  if (!q || q.length < 2) return { meta: snapshot.meta, items: [], note: "query_too_short" };
+  const upper = q.toUpperCase();
+  const items = [];
+  for (const item of snapshot.items) {
+    if (
+      (item.atc && item.atc.toUpperCase().startsWith(upper)) ||
+      (item.ing && item.ing.toUpperCase().includes(upper)) ||
+      (item.en && item.en.toUpperCase().includes(upper)) ||
+      (item.zh && item.zh.includes(q))
+    ) {
+      items.push(item);
+      if (items.length >= 30) break;
+    }
+  }
+  return { meta: snapshot.meta, items };
 }
 
 // ---------------------------------------------------------------------------
@@ -860,6 +956,8 @@ function extractFacts(payload) {
   addIf(activities, "罕見疾病", matchAny(text, ["罕見疾病", "罕病", "孤兒藥", "orphan"]));
   addIf(activities, "管制藥品", matchAny(text, ["管制藥品", "麻醉藥品", "影響精神藥物", "影響精神藥品", "毒品"]));
   addIf(activities, "專案申請", matchAny(text, ["專案核准", "專案申請", "恩慈", "compassionate", "尚無合適替代療法"]));
+  addIf(activities, "健保給付", matchAny(text, ["健保", "給付", "收載", "藥價", "支付標準", "核價"]));
+  addIf(activities, "廣告", matchAny(text, ["廣告", "衛教", "宣傳", "行銷", "推廣"]));
   if (activities.length === 0) activities.push("引入", "上市", "查驗登記");
 
   const missingFacts = [];

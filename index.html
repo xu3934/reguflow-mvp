@@ -113,6 +113,14 @@
                   <option value="QA">QA 品質保證</option>
                 </select>
               </label>
+              <label>
+                競品查詢（選填）
+                <input
+                  id="nhiQuery"
+                  type="text"
+                  placeholder="主成分英文或 ATC 碼，如 PEMBROLIZUMAB"
+                />
+              </label>
             </div>
 
             <fieldset class="checkbox-group">
@@ -121,6 +129,8 @@
               <label><input type="checkbox" name="lawType" value="生產 GMP" checked /> 生產 GMP</label>
               <label><input type="checkbox" name="lawType" value="查驗登記" checked /> 查驗登記</label>
               <label><input type="checkbox" name="lawType" value="供應來源與流向" /> 供應來源與流向</label>
+              <label><input type="checkbox" name="lawType" value="健保給付" /> 健保給付</label>
+              <label><input type="checkbox" name="lawType" value="廣告與衛教" /> 廣告與衛教</label>
             </fieldset>
 
             <button class="primary-button" id="analyze" type="button">
@@ -188,6 +198,32 @@
                   <tbody id="traceRows"></tbody>
                 </table>
               </div>
+            </article>
+
+            <article class="report-card wide-card hidden" id="nhiCard">
+              <div class="section-header">
+                <div>
+                  <p class="section-label">NHI Open Data</p>
+                  <h3>競品收載狀況（健保署開放資料）</h3>
+                </div>
+                <span class="score-badge" id="nhiMeta">--</span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>藥品名稱</th>
+                      <th>成分</th>
+                      <th>劑型</th>
+                      <th>支付價</th>
+                      <th>藥商</th>
+                      <th>ATC</th>
+                    </tr>
+                  </thead>
+                  <tbody id="nhiRows"></tbody>
+                </table>
+              </div>
+              <p class="hint-text" id="nhiProvenance"></p>
             </article>
           </section>
         </section>
