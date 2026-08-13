@@ -299,6 +299,7 @@ const pipelineSteps = [
 const scenarioInput = document.querySelector("#scenario");
 const productTypeInput = document.querySelector("#productType");
 const roleInput = document.querySelector("#role");
+const jobFunctionInput = document.querySelector("#jobFunction");
 const marketInput = document.querySelector("#market");
 const analyzeButton = document.querySelector("#analyze");
 const loadDemoButton = document.querySelector("#loadDemo");
@@ -314,6 +315,7 @@ loadDemoButton.addEventListener("click", () => {
   scenarioInput.value = GOLDEN_SCENARIO;
   productTypeInput.value = "cell_therapy";
   roleInput.value = "進口代理商";
+  jobFunctionInput.value = "BD";
   setCheckedLawTypes(["運輸 GDP", "生產 GMP", "查驗登記", "供應來源與流向"]);
 });
 
@@ -397,6 +399,7 @@ function collectPayload(scenario) {
     product_type: productTypeInput.value,
     selectedType: productTypeInput.value,
     role: roleInput.value,
+    job_function: jobFunctionInput.value || null,
     law_type: getCheckedLawTypes(),
   };
 }

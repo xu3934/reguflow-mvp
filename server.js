@@ -294,6 +294,43 @@ const LAW_INDEX = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Role profiles — job-function lens applied on top of the company role.
+// Only affects how the AI frames the same grounded law texts; it must never
+// license the model to invent content outside the retrieved laws.
+// ---------------------------------------------------------------------------
+
+const ROLE_PROFILES = {
+  BD: {
+    label: "BD 商務開發",
+    promptC:
+      "讀者是商務開發（BD）。每條法規都要回答：對市場進入門檻、上市時程與交易合作條件的影響。重點整理以「這條法規讓進入市場變快還是變慢、成本變高還是變低」為敘事主軸；Checklist 以商業決策為單位（例如評估取證時程、確認授權文件），不是合規作業細節。缺漏事實聚焦目標適應症與商業條件是否已明確。法規未涵蓋市場規模或商業數據時，明確標示需另行市調確認，不得自行推論市場資訊。",
+    promptD:
+      "三階段以市場進入視角切分：【市場評估】法規門檻與時程盤點、【取證推進】查驗登記與授權安排、【上市準備】通路與合規交接。",
+  },
+  PM: {
+    label: "PM 產品經理",
+    promptC:
+      "讀者是產品經理（PM）。每條法規都要回答：對上市時程、健保給付申請前提、適應症範圍的影響。例如藥品許可證是健保收載申請的前提，取證時程直接決定給付申請最早遞件時點；附款許可的條件可能影響給付範圍認定。Checklist 以商業決策為單位（確認取證時程回推收載遞件時點、盤點競品收載狀況、評估罕見疾病藥物認定對給付談判的影響），不是合規作業。缺漏事實聚焦競品收載狀況與療效及成本效益資料完備度。法規未涵蓋健保給付細節時，明確標示需另行確認，不得自行推論給付規定。",
+    promptD:
+      "三階段以產品上市視角切分：【取證階段】查驗登記與取證策略、【收載準備】健保給付申請前置作業、【上市後管理】給付範圍維護與市場監測。",
+  },
+  RA: {
+    label: "RA 法規事務",
+    promptC:
+      "讀者是法規事務（RA）。重點整理需保留法規條號與原文依據，逐條說明適用要件與送審資料要求；Checklist 以送件作業為單位，具體到文件名稱與申請程序。缺漏事實聚焦送審資料包的完備度。",
+    promptD:
+      "三階段以送審作業視角切分：【送件前置】資料包整備、【審查應對】查驗登記與補件、【核准後義務】變更登記與展延管理。",
+  },
+  QA: {
+    label: "QA 品質保證",
+    promptC:
+      "讀者是品質保證（QA）。每條法規都要回答：對品質系統、文件紀錄與稽核準備的要求。重點整理聚焦 GMP/GDP 相關義務、人員資格與紀錄保存年限；Checklist 以品質系統建置為單位（SOP、批次紀錄、溫控紀錄、供應商稽核）。缺漏事實聚焦品質系統現況與稽核缺口。",
+    promptD:
+      "三階段以品質管理視角切分：【體系建置】品質系統與人員資格、【日常運作】紀錄與監控、【稽核應對】查核準備與矯正措施。",
+  },
+};
+
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -402,11 +439,12 @@ async function analyzeWithPipeline(payload) {
 
     const role = facts.role;
     const scenario = facts.rawScenario;
+    const profile = ROLE_PROFILES[facts.jobFunction] || null;
 
     // Step 3f: Run Prompt C and Prompt D in parallel
     const [resultC, resultD] = await Promise.allSettled([
-      runPromptC(allLawTexts, role, scenario),
-      runPromptD(allLawTexts, role, scenario),
+      runPromptC(allLawTexts, role, scenario, profile),
+      runPromptD(allLawTexts, role, scenario, profile),
     ]);
 
     const promptCData = resultC.status === "fulfilled" ? resultC.value : null;
@@ -580,7 +618,8 @@ ${motherLawText}
 // Prompt C — applicable laws + summary + checklist + missing facts
 // ---------------------------------------------------------------------------
 
-async function runPromptC(allLawTexts, role, scenario) {
+async function runPromptC(allLawTexts, role, scenario, profile) {
+  const roleLabel = profile ? `${role}（${profile.label} 視角）` : role;
   const input = `以下是使用者實際描述的情境與需求：
 ${scenario || "（使用者未提供詳細描述）"}
 
@@ -588,7 +627,7 @@ ${scenario || "（使用者未提供詳細描述）"}
 
 ${allLawTexts}
 
-請根據以上法規內容，並緊扣使用者描述的實際情境與需求，針對角色「${role}」，輸出以下 JSON 格式的分析結果：
+請根據以上法規內容，並緊扣使用者描述的實際情境與需求，針對角色「${roleLabel}」，輸出以下 JSON 格式的分析結果：
 {
   "applicable_laws": [
     {
@@ -606,9 +645,10 @@ ${allLawTexts}
 
 只輸出 JSON，不要有其他說明。`;
 
+  const baseInstructions =
+    "你是台灣生醫法規顧問，專為 BD、PM、RA、QA 及物流人員撰寫法規摘要。只根據提供的法規內容作答，不得虛構法條或引用，但摘要與 Checklist 必須針對使用者描述的具體情境客製化，不要只是複述通用法規概要。只輸出 JSON。";
   const text = await callOpenAI({
-    instructions:
-      "你是台灣生醫法規顧問，專為 BD、PM、RA、QA 及物流人員撰寫法規摘要。只根據提供的法規內容作答，不得虛構法條或引用，但摘要與 Checklist 必須針對使用者描述的具體情境客製化，不要只是複述通用法規概要。只輸出 JSON。",
+    instructions: profile ? `${baseInstructions}\n\n職能視角要求：${profile.promptC}` : baseInstructions,
     input,
   });
 
@@ -619,7 +659,9 @@ ${allLawTexts}
 // Prompt D — process stages (exactly 3 stages)
 // ---------------------------------------------------------------------------
 
-async function runPromptD(allLawTexts, role, scenario) {
+async function runPromptD(allLawTexts, role, scenario, profile) {
+  const roleLabel = profile ? `${role}（${profile.label} 視角）` : role;
+  const stageGuidance = profile ? `\n\n階段切分要求：${profile.promptD}` : "";
   const input = `以下是使用者實際描述的情境與需求：
 ${scenario || "（使用者未提供詳細描述）"}
 
@@ -627,11 +669,11 @@ ${scenario || "（使用者未提供詳細描述）"}
 
 ${allLawTexts}
 
-請根據以上法規內容，並緊扣使用者描述的實際情境與需求，針對角色「${role}」，輸出恰好 3 個作業階段的 JSON 陣列，每個階段包含：
+請根據以上法規內容，並緊扣使用者描述的實際情境與需求，針對角色「${roleLabel}」，輸出恰好 3 個作業階段的 JSON 陣列，每個階段包含：
 - stage_title: 階段名稱（例如「【源頭管理】供應來源確認」）
 - law_name: 該階段依據的主要法規名稱
 - control_points: 該階段的查核重點（字串陣列）
-- owner: 負責單位或角色
+- owner: 負責單位或角色${stageGuidance}
 
 只輸出 JSON 陣列，不要有其他說明。`;
 
@@ -836,6 +878,7 @@ function extractFacts(payload) {
     productType,
     productTypeLabel: translateProductType(productType),
     role: payload.role || "進口代理商",
+    jobFunction: ROLE_PROFILES[payload.job_function] ? payload.job_function : null,
     lawTypes: payload.law_type || ["查驗登記"],
     activities,
     missingFacts,
