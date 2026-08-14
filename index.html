@@ -56,6 +56,120 @@
             <button class="ghost-button" id="loadDemo" type="button">載入 Demo Case</button>
           </header>
 
+          <div class="mode-tabs" role="tablist">
+            <button class="mode-tab active" id="tabRetrieval" type="button" role="tab">法規檢索</button>
+            <button class="mode-tab" id="tabCompliance" type="button" role="tab">合規檢查</button>
+          </div>
+
+          <div id="modeCompliance" class="hidden">
+            <section class="input-section">
+              <div class="section-header">
+                <div>
+                  <p class="section-label">Compliance Screening</p>
+                  <h3>廣告與衛教文案合規檢查</h3>
+                </div>
+                <span class="status-pill api-off">送審前自我檢查</span>
+              </div>
+
+              <div class="api-status">
+                🔒 檔案在您的瀏覽器內解析，<strong>原始檔案不會上傳</strong>，僅抽取出的文字會送出分析；伺服器不儲存任何內容。文字會送至 OpenAI API 進行判讀。
+              </div>
+
+              <label class="input-label" for="adContent">貼上文案內容，或上傳 .txt / .docx 檔：</label>
+              <textarea
+                id="adContent"
+                rows="8"
+                placeholder="例如：本產品經臨床實驗證實，三週有效改善關節疼痛，多位醫師推薦..."
+              ></textarea>
+
+              <div class="upload-row">
+                <input type="file" id="adFile" accept=".txt,.md,.docx" />
+                <span class="hint-text" id="fileStatus"></span>
+              </div>
+
+              <div class="form-grid">
+                <label>
+                  產品類型
+                  <select id="ccProductType">
+                    <option value="prescription_drug">處方藥</option>
+                    <option value="otc_drug">指示藥</option>
+                    <option value="general_drug">成藥</option>
+                    <option value="cell_therapy">細胞製劑 / 再生醫療製劑</option>
+                  </select>
+                </label>
+                <label>
+                  投放通路
+                  <select id="ccChannel">
+                    <option value="mass_media">大眾媒體（電視、報章雜誌）</option>
+                    <option value="social_media">社群媒體／網紅內容</option>
+                    <option value="website">公司網站／消費者可見網頁</option>
+                    <option value="outdoor">戶外廣告</option>
+                    <option value="academic_journal">學術性醫療刊物</option>
+                    <option value="professional">醫療專業人員場合</option>
+                  </select>
+                </label>
+                <label>
+                  已取得藥品許可證
+                  <select id="ccHasLicense">
+                    <option value="true">是</option>
+                    <option value="false">否</option>
+                  </select>
+                </label>
+                <label>
+                  刊登者為藥商
+                  <select id="ccIsDrugSeller">
+                    <option value="true">是</option>
+                    <option value="false">否</option>
+                  </select>
+                </label>
+                <label>
+                  廣告已取得核准
+                  <select id="ccAdApproved">
+                    <option value="false">否／尚未送審</option>
+                    <option value="true">是</option>
+                  </select>
+                </label>
+              </div>
+
+              <button class="primary-button" id="runCheck" type="button">開始合規檢查</button>
+            </section>
+
+            <section class="progress-section hidden" id="ccProgress" aria-live="polite">
+              <div class="spinner-row">
+                <span class="spinner" aria-hidden="true"></span>
+                <p>正在比對藥事法第七章條文，請稍候...</p>
+              </div>
+            </section>
+
+            <section class="results-grid hidden" id="ccResults">
+              <article class="report-card wide-card">
+                <div class="section-header">
+                  <div>
+                    <p class="section-label">Structural Rules</p>
+                    <h3>條件性檢查（依填寫條件判定）</h3>
+                  </div>
+                  <span class="score-badge" id="ccStructuralCount">--</span>
+                </div>
+                <div id="ccStructural" class="answers-list"></div>
+              </article>
+
+              <article class="report-card wide-card">
+                <div class="section-header">
+                  <div>
+                    <p class="section-label">Text Screening</p>
+                    <h3>文字內容檢查</h3>
+                  </div>
+                  <span class="score-badge" id="ccTextCount">--</span>
+                </div>
+                <div id="ccText" class="answers-list"></div>
+                <p class="hint-text">
+                  本檢查為送審前自我檢視，<strong>不等同於藥事法第66條之主管機關核准</strong>；刊播前仍須依法送審，結果請由法務或法規事務人員複核。
+                </p>
+              </article>
+            </section>
+          </div>
+
+          <div id="modeRetrieval">
           <section class="input-section" aria-labelledby="input-title">
             <div class="section-header">
               <div>
@@ -236,6 +350,7 @@
               <p class="hint-text" id="nhiProvenance"></p>
             </article>
           </section>
+          </div>
         </section>
       </section>
     </main>

@@ -35,6 +35,38 @@ function cacheSet(cache, key, value) {
   cache.set(key, { value, expiresAt: Date.now() + LAW_TEXT_TTL_MS });
 }
 
+// ---------------------------------------------------------------------------
+// Rate limiting — the AI endpoints each cost several model calls, and they are
+// reachable without authentication, so cap them per client.
+// ---------------------------------------------------------------------------
+
+const RATE_WINDOW_MS = 60 * 1000;
+const RATE_MAX_PER_WINDOW = 8;
+const rateBuckets = new Map();
+
+function clientKey(req) {
+  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return forwarded || req.socket.remoteAddress || "unknown";
+}
+
+function isRateLimited(req) {
+  const key = clientKey(req);
+  const now = Date.now();
+  const recent = (rateBuckets.get(key) || []).filter((t) => now - t < RATE_WINDOW_MS);
+  if (recent.length >= RATE_MAX_PER_WINDOW) {
+    rateBuckets.set(key, recent);
+    return true;
+  }
+  recent.push(now);
+  rateBuckets.set(key, recent);
+  if (rateBuckets.size > 5000) {
+    for (const [k, times] of rateBuckets) {
+      if (!times.some((t) => now - t < RATE_WINDOW_MS)) rateBuckets.delete(k);
+    }
+  }
+  return false;
+}
+
 const LAW_INDEX = [
   {
     id: "regen-act",
@@ -436,9 +468,17 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "POST" && (url.pathname === "/api/v1/analyze" || url.pathname === "/api/analyze")) {
+      if (isRateLimited(req)) return sendJson(res, 429, { error: "rate_limited", message: "請求過於頻繁，請稍後再試。" });
       const payload = await readJson(req);
       const report = await analyzeWithPipeline(payload);
       return sendJson(res, 200, report);
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/compliance-check") {
+      if (isRateLimited(req)) return sendJson(res, 429, { error: "rate_limited", message: "請求過於頻繁，請稍後再試。" });
+      const payload = await readJson(req);
+      const result = await checkAdCompliance(payload);
+      return sendJson(res, 200, result);
     }
 
     if (req.method !== "GET" && req.method !== "HEAD") {
@@ -730,6 +770,185 @@ async function rankMotherLawsBySimilarity(queryText) {
   } catch {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Reverse compliance check — screen promotional copy against 藥事法第七章.
+// Structural rules that can be decided from the declared context are evaluated
+// deterministically; only the judgement calls about wording go to the model.
+// User content is processed in memory and never written to disk or logged.
+// ---------------------------------------------------------------------------
+
+const AD_CHAPTER_URL = "https://law.moj.gov.tw/LawClass/LawParaDeatil.aspx?pcode=L0030001&bp=8";
+const AD_CHAPTER_CACHE_KEY = "ad-chapter-7";
+const MAX_CONTENT_CHARS = 20000;
+
+async function fetchAdChapterText() {
+  const cached = cacheGet(lawTextCache, AD_CHAPTER_CACHE_KEY);
+  if (cached !== undefined) return cached;
+  try {
+    const text = parseLawHtml(await httpGet(AD_CHAPTER_URL));
+    if (text) cacheSet(lawTextCache, AD_CHAPTER_CACHE_KEY, text);
+    return text;
+  } catch {
+    const entry = LAW_INDEX.find((l) => l.id === "drug-ad");
+    return entry ? `【${entry.title}】\n${entry.article}: ${entry.articleText}` : "";
+  }
+}
+
+// Article 67 restricts prescription-drug advertising to academic medical
+// publications, and articles 65/66 require an authorised drug seller with a
+// pre-approved advertisement — all decidable from the declared context alone.
+function structuralAdFindings({ productType, channel, hasLicense, isDrugSeller, adApproved }) {
+  const findings = [];
+  const consumerChannels = ["mass_media", "social_media", "outdoor", "website"];
+
+  if (productType === "prescription_drug" && consumerChannels.includes(channel)) {
+    findings.push({
+      article: "藥事法第67條",
+      severity: "violation",
+      excerpt: "（依您填寫的產品類型與投放通路判定）",
+      reason:
+        "須由醫師處方之藥物，其廣告以登載於學術性醫療刊物為限。本案為處方藥並投放於一般消費者通路，屬條文明文禁止之情形，與文案用字無關。",
+    });
+  }
+  if (hasLicense === false) {
+    findings.push({
+      article: "藥事法第66條",
+      severity: "violation",
+      excerpt: "（依您填寫的藥證狀態判定）",
+      reason: "尚未取得藥品許可證之產品無法取得廣告核准；於取證前刊播藥物廣告不符第66條事前核准規定。",
+    });
+  }
+  if (isDrugSeller === false) {
+    findings.push({
+      article: "藥事法第65條",
+      severity: "violation",
+      excerpt: "（依您填寫的刊登者身分判定）",
+      reason: "非藥商不得為藥物廣告。刊登者非領有藥商許可執照者，不得刊播本文案。",
+    });
+  }
+  if (adApproved === false) {
+    findings.push({
+      article: "藥事法第66條",
+      severity: "note",
+      excerpt: "（依您填寫的送審狀態判定）",
+      reason:
+        "藥物廣告應於刊播前將所有文字、圖畫或言詞送中央或直轄市衛生主管機關核准。本檢查為送審前自我檢視，不能取代法定核准程序。",
+    });
+  }
+  return findings;
+}
+
+async function checkAdCompliance(payload) {
+  const content = String(payload.content || "").slice(0, MAX_CONTENT_CHARS).trim();
+  if (!content) return { error: "empty_content", message: "請提供要檢查的文案內容。" };
+
+  const context = {
+    productType: payload.product_type || "prescription_drug",
+    channel: payload.channel || "mass_media",
+    hasLicense: payload.has_license === undefined ? null : Boolean(payload.has_license),
+    isDrugSeller: payload.is_drug_seller === undefined ? null : Boolean(payload.is_drug_seller),
+    adApproved: payload.ad_approved === undefined ? null : Boolean(payload.ad_approved),
+  };
+
+  const structural = structuralAdFindings(context);
+  const lawText = await fetchAdChapterText();
+
+  if (!OPENAI_API_KEY) {
+    return {
+      mode: "structural_only",
+      checkedAt: new Date().toISOString(),
+      context,
+      structural_findings: structural,
+      text_findings: [],
+      note: "未設定 AI 金鑰，僅執行可由填寫條件判定的結構性檢查，未進行文字內容判讀。",
+    };
+  }
+
+  let textFindings = [];
+  let mode = "full";
+  try {
+    const result = await runAdCompliancePrompt(content, lawText, context);
+    textFindings = Array.isArray(result?.findings) ? result.findings : [];
+  } catch (err) {
+    mode = "structural_only_ai_failed";
+    textFindings = [];
+    return {
+      mode,
+      checkedAt: new Date().toISOString(),
+      context,
+      structural_findings: structural,
+      text_findings: [],
+      aiError: err.message,
+    };
+  }
+
+  const allowed = ["violation", "risk", "note"];
+  const sanitized = textFindings
+    .filter((f) => f && f.excerpt && f.reason)
+    .slice(0, 20)
+    .map((f) => ({
+      excerpt: String(f.excerpt).slice(0, 300),
+      article: String(f.article || "藥事法第七章"),
+      severity: allowed.includes(f.severity) ? f.severity : "risk",
+      reason: String(f.reason).slice(0, 600),
+    }));
+
+  return {
+    mode,
+    model: OPENAI_MODEL,
+    checkedAt: new Date().toISOString(),
+    context,
+    structural_findings: structural,
+    text_findings: sanitized,
+  };
+}
+
+async function runAdCompliancePrompt(content, lawText, context) {
+  const channelLabels = {
+    mass_media: "大眾媒體（電視、報章雜誌等）",
+    social_media: "社群媒體／網紅內容",
+    academic_journal: "學術性醫療刊物",
+    outdoor: "戶外廣告",
+    website: "公司網站／消費者可見網頁",
+    professional: "醫療專業人員場合",
+  };
+
+  const input = `以下是藥事法第七章「藥物廣告之管理」的條文全文：
+
+${lawText}
+
+本案背景：
+- 產品類型：${translateProductType(context.productType)}
+- 投放通路：${channelLabels[context.channel] || context.channel}
+
+以下是待檢查的文案內容：
+---
+${content}
+---
+
+請逐段檢視文案，找出可能牴觸上述條文的表述。特別注意：
+- 第68條：假借他人名義宣傳、利用書刊資料保證效能、藉採訪或報導形式宣傳、其他不正當方式
+- 第69條：非藥物不得為醫療效能之標示或宣傳
+- 第70條：內容若暗示或影射醫療效能，即使以採訪、報導或衛教形式呈現，仍視為藥物廣告
+
+請嚴格以 JSON 輸出：
+{"findings": [{"excerpt": "文案中的原文片段（必須逐字引用，不可改寫）", "article": "所涉條文，如 藥事法第68條第3款", "severity": "violation | risk | note", "reason": "說明為何有疑慮，並對應條文內容"}]}
+
+規則：
+- excerpt 必須是文案中實際出現的字句，逐字引用。
+- 只能引用上方提供的條文，不得引用未出現於上方全文的法條。
+- severity 僅在條文明文禁止且文案明確踩線時使用 violation；語意模糊、需人工判斷者用 risk；僅屬提醒性質用 note。
+- 若文案沒有明顯問題，findings 回傳空陣列，不要為了湊數而虛構問題。
+只輸出 JSON。`;
+
+  const text = await callOpenAI({
+    instructions:
+      "你是台灣藥物廣告法規審查專家。只根據提供的藥事法條文判斷，不得引用其他法規或自行推論未載明的規定。逐字引用文案原文作為佐證。只輸出 JSON。",
+    input,
+  });
+  return parseJsonObject(text);
 }
 
 // ---------------------------------------------------------------------------

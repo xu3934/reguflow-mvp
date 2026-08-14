@@ -846,6 +846,190 @@ function getModeLabel(mode) {
   }[mode] || "Local fallback";
 }
 
+// ---------------------------------------------------------------------------
+// Compliance check mode
+// ---------------------------------------------------------------------------
+
+const tabRetrieval = document.querySelector("#tabRetrieval");
+const tabCompliance = document.querySelector("#tabCompliance");
+const modeRetrieval = document.querySelector("#modeRetrieval");
+const modeCompliance = document.querySelector("#modeCompliance");
+const adContent = document.querySelector("#adContent");
+const adFile = document.querySelector("#adFile");
+const fileStatus = document.querySelector("#fileStatus");
+const runCheck = document.querySelector("#runCheck");
+
+tabRetrieval.addEventListener("click", () => switchMode("retrieval"));
+tabCompliance.addEventListener("click", () => switchMode("compliance"));
+
+function switchMode(mode) {
+  const isCompliance = mode === "compliance";
+  modeCompliance.classList.toggle("hidden", !isCompliance);
+  modeRetrieval.classList.toggle("hidden", isCompliance);
+  tabCompliance.classList.toggle("active", isCompliance);
+  tabRetrieval.classList.toggle("active", !isCompliance);
+}
+
+adFile.addEventListener("change", async () => {
+  const file = adFile.files && adFile.files[0];
+  if (!file) return;
+  fileStatus.textContent = "解析中...";
+  try {
+    const text = file.name.toLowerCase().endsWith(".docx")
+      ? await extractDocxText(file)
+      : await file.text();
+    adContent.value = text.trim();
+    fileStatus.textContent = `已從 ${file.name} 讀入 ${adContent.value.length} 字（檔案未上傳）`;
+  } catch (error) {
+    fileStatus.textContent = `無法解析此檔案：${error.message}。請改用純文字貼上。`;
+  } finally {
+    // Drop the file handle; only the extracted text is kept in the textarea.
+    adFile.value = "";
+  }
+});
+
+// Extract text from a .docx entirely in the browser: a docx is a ZIP whose
+// word/document.xml holds the body text. Uses only built-in APIs so no file
+// bytes ever leave the page.
+async function extractDocxText(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const view = new DataView(bytes.buffer);
+  const decoder = new TextDecoder();
+
+  let eocd = -1;
+  const scanFloor = Math.max(0, bytes.length - 65558);
+  for (let i = bytes.length - 22; i >= scanFloor; i--) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) throw new Error("不是有效的 docx");
+
+  const entryCount = view.getUint16(eocd + 10, true);
+  let pointer = view.getUint32(eocd + 16, true);
+
+  for (let i = 0; i < entryCount; i++) {
+    if (view.getUint32(pointer, true) !== 0x02014b50) break;
+    const method = view.getUint16(pointer + 10, true);
+    const compressedSize = view.getUint32(pointer + 20, true);
+    const nameLength = view.getUint16(pointer + 28, true);
+    const extraLength = view.getUint16(pointer + 30, true);
+    const commentLength = view.getUint16(pointer + 32, true);
+    const localOffset = view.getUint32(pointer + 42, true);
+    const name = decoder.decode(bytes.subarray(pointer + 46, pointer + 46 + nameLength));
+
+    if (name === "word/document.xml") {
+      const localNameLength = view.getUint16(localOffset + 26, true);
+      const localExtraLength = view.getUint16(localOffset + 28, true);
+      const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+      const data = bytes.subarray(dataStart, dataStart + compressedSize);
+      let xmlBytes = data;
+      if (method === 8) {
+        const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+        xmlBytes = new Uint8Array(await new Response(stream).arrayBuffer());
+      }
+      return docxXmlToText(decoder.decode(xmlBytes));
+    }
+    pointer += 46 + nameLength + extraLength + commentLength;
+  }
+  throw new Error("docx 內找不到內文");
+}
+
+function docxXmlToText(xml) {
+  return xml
+    .replace(/<\/w:p>/g, "\n")
+    .replace(/<w:tab[^>]*\/>/g, "\t")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+runCheck.addEventListener("click", async () => {
+  const content = adContent.value.trim();
+  if (!content) {
+    adContent.focus();
+    return;
+  }
+
+  runCheck.disabled = true;
+  document.querySelector("#ccResults").classList.add("hidden");
+  document.querySelector("#ccProgress").classList.remove("hidden");
+
+  try {
+    const response = await fetch("/api/v1/compliance-check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content,
+        product_type: document.querySelector("#ccProductType").value,
+        channel: document.querySelector("#ccChannel").value,
+        has_license: document.querySelector("#ccHasLicense").value === "true",
+        is_drug_seller: document.querySelector("#ccIsDrugSeller").value === "true",
+        ad_approved: document.querySelector("#ccAdApproved").value === "true",
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || `檢查失敗：${response.status}`);
+    renderComplianceResult(data);
+    document.querySelector("#ccResults").classList.remove("hidden");
+  } catch (error) {
+    document.querySelector("#ccStructural").innerHTML = `<div class="answer-item">${escapeHtml(error.message)}</div>`;
+    document.querySelector("#ccText").innerHTML = "";
+    document.querySelector("#ccResults").classList.remove("hidden");
+  } finally {
+    document.querySelector("#ccProgress").classList.add("hidden");
+    runCheck.disabled = false;
+  }
+});
+
+function renderComplianceResult(data) {
+  const structural = data.structural_findings || [];
+  const textFindings = data.text_findings || [];
+
+  document.querySelector("#ccStructuralCount").textContent = `${structural.length} 項`;
+  document.querySelector("#ccTextCount").textContent =
+    data.mode === "structural_only" || data.mode === "structural_only_ai_failed"
+      ? "未執行"
+      : `${textFindings.length} 項`;
+
+  document.querySelector("#ccStructural").innerHTML = structural.length
+    ? structural.map(renderFinding).join("")
+    : `<div class="answer-item">依您填寫的條件，未發現結構性違規（產品類型、通路、藥商身分與藥證狀態均相容）。</div>`;
+
+  const noteMap = {
+    structural_only: "未設定 AI 金鑰，僅執行條件性檢查。",
+    structural_only_ai_failed: `文字判讀失敗，僅顯示條件性檢查結果。原因：${data.aiError || "未知"}`,
+  };
+  document.querySelector("#ccText").innerHTML = noteMap[data.mode]
+    ? `<div class="answer-item">${escapeHtml(noteMap[data.mode])}</div>`
+    : textFindings.length
+      ? textFindings.map(renderFinding).join("")
+      : `<div class="answer-item">文字內容未發現明顯牴觸藥事法第七章之表述。仍建議由法規事務人員複核後送審。</div>`;
+}
+
+function renderFinding(finding) {
+  const severityLabels = {
+    violation: "明確違規",
+    risk: "有風險需審視",
+    note: "提醒",
+  };
+  const severity = severityLabels[finding.severity] ? finding.severity : "risk";
+  return `<div class="answer-item finding-${severity}">
+    <p class="answer-question">
+      ${escapeHtml(finding.article)}
+      <span class="answer-grounding severity-${severity}">${severityLabels[severity]}</span>
+    </p>
+    <p class="finding-excerpt">${escapeHtml(finding.excerpt)}</p>
+    <p>${escapeHtml(finding.reason)}</p>
+  </div>`;
+}
+
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
