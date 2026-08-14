@@ -7,6 +7,33 @@ loadDotEnv();
 const PORT = Number(process.env.PORT || 3000);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+// Prompt A (pick a mother law from a shortlist) and Prompt B (pull authorizing
+// clauses out of a statute) are classification/extraction, not drafting — a
+// smaller model handles them at a fraction of the latency.
+const OPENAI_FAST_MODEL = process.env.OPENAI_FAST_MODEL || "gpt-4.1-nano";
+
+// Scraped statutes and the sub-laws they authorize change on a legislative
+// timescale, so both are cached across requests. Only successful lookups are
+// stored: caching a scrape failure would pin the degraded fallback text in
+// place for days.
+const LAW_TEXT_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+const lawTextCache = new Map();
+const subLawCache = new Map();
+const pcodeByNameCache = new Map();
+
+function cacheGet(cache, key) {
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() > entry.expiresAt) {
+    cache.delete(key);
+    return undefined;
+  }
+  return entry.value;
+}
+
+function cacheSet(cache, key, value) {
+  cache.set(key, { value, expiresAt: Date.now() + LAW_TEXT_TTL_MS });
+}
 
 const LAW_INDEX = [
   {
@@ -432,6 +459,14 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`ReguFlow MVP running at http://localhost:${PORT}`);
   console.log(OPENAI_API_KEY ? `AI mode enabled with ${OPENAI_MODEL}` : "AI mode disabled. Using local fallback.");
+  // Build the mother-law vectors now so the first real request doesn't pay for
+  // it. Failures are already handled inside (retrieval falls back to the full
+  // list), so this is fire-and-forget.
+  if (OPENAI_API_KEY) {
+    ensureMotherLawEmbeddings()
+      .then((cache) => console.log(cache ? `Embedding cache warm (${cache.length} mother laws)` : "Embedding warmup skipped"))
+      .catch(() => {});
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -471,7 +506,7 @@ async function analyzeWithPipeline(payload) {
     // Step 3c: Prompt B — extract sub-law authorization phrases
     let subLawRefs = [];
     try {
-      subLawRefs = await runPromptB(motherLawText, motherLawName || pcode);
+      subLawRefs = await runPromptB(motherLawText, motherLawName || pcode, pcode);
     } catch {
       subLawRefs = [];
     }
@@ -725,6 +760,7 @@ ${lawListText}`;
     instructions:
       "你是台灣生醫法規專家。請根據使用者情境判斷最相關的母法 PCode 與健保品項查詢字串，只輸出 JSON，不要有其他說明。",
     input,
+    model: OPENAI_FAST_MODEL,
   });
 
   const result = parseJsonObject(text);
@@ -738,7 +774,12 @@ ${lawListText}`;
 // Prompt B — extract sub-law authorization phrases from mother law text
 // ---------------------------------------------------------------------------
 
-async function runPromptB(motherLawText, lawName) {
+async function runPromptB(motherLawText, lawName, cacheKey) {
+  if (cacheKey) {
+    const cached = cacheGet(subLawCache, cacheKey);
+    if (cached !== undefined) return cached;
+  }
+
   const input = `以下是母法「${lawName}」的全文：
 
 ${motherLawText}
@@ -754,11 +795,14 @@ ${motherLawText}
     instructions:
       "你是台灣法規文本分析專家。請從母法條文中識別授權子法的條款，嚴格以 JSON 陣列格式輸出，不要有任何其他說明。",
     input,
+    model: OPENAI_FAST_MODEL,
   });
 
   const result = parseJsonSafe(text);
   if (!Array.isArray(result)) return [];
-  return result.slice(0, 4);
+  const refs = result.slice(0, 4);
+  if (cacheKey && refs.length) cacheSet(subLawCache, cacheKey, refs);
+  return refs;
 }
 
 // ---------------------------------------------------------------------------
@@ -887,12 +931,18 @@ function parseLawHtml(html) {
 }
 
 async function fetchLawText(pcode) {
+  const cached = cacheGet(lawTextCache, pcode);
+  if (cached !== undefined) return cached;
+
   try {
     const url = findSourceUrl(pcode);
     const html = await httpGet(url);
-    return parseLawHtml(html);
+    const text = parseLawHtml(html);
+    if (text) cacheSet(lawTextCache, pcode, text);
+    return text;
   } catch {
-    // Fallback to static index
+    // Fall back to the static index, but do not cache it — the next request
+    // should retry the scrape rather than reuse a degraded result.
     const entry = LAW_INDEX.find((l) => l.pcode === pcode);
     if (entry) {
       return `【${entry.title}】\n${entry.article}: ${entry.articleText}`;
@@ -911,14 +961,20 @@ async function findPcodeByName(lawName) {
   );
   if (found) return found.pcode;
 
+  const cached = cacheGet(pcodeByNameCache, trimmed);
+  if (cached !== undefined) return cached;
+
   // Try search endpoint
   try {
     const searchUrl = `https://law.moj.gov.tw/Law/LawSearchResult.aspx?p=NI&t=E1&k=${encodeURIComponent(trimmed)}`;
     const html = await httpGet(searchUrl);
     const match = html.match(/pcode=([A-Z][0-9A-Z]{7})/i);
-    if (match) return match[1];
+    if (match) {
+      cacheSet(pcodeByNameCache, trimmed, match[1]);
+      return match[1];
+    }
   } catch {
-    // Search failed, return null
+    // Search failed, return null without caching so the next request retries.
   }
   return null;
 }
@@ -970,14 +1026,14 @@ function buildLocalReport(facts, candidates, assessments) {
 // OpenAI caller
 // ---------------------------------------------------------------------------
 
-async function callOpenAI({ instructions, input }) {
+async function callOpenAI({ instructions, input, model }) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${OPENAI_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ model: OPENAI_MODEL, instructions, input, temperature: 0 }),
+    body: JSON.stringify({ model: model || OPENAI_MODEL, instructions, input, temperature: 0 }),
   });
   const json = await response.json();
   if (!response.ok) throw new Error(json.error?.message || `OpenAI request failed: ${response.status}`);
