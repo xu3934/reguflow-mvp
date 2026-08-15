@@ -801,15 +801,29 @@ async function fetchAdChapterText() {
 // pre-approved advertisement — all decidable from the declared context alone.
 function structuralAdFindings({ productType, channel, hasLicense, isDrugSeller, adApproved }) {
   const findings = [];
+  // 食藥署明示刊播媒介包含網際網路，故網站與社群一律視為消費者通路。
   const consumerChannels = ["mass_media", "social_media", "outdoor", "website"];
+  // 再生醫療製劑須由醫師處方，其許可證載明後同受第67條拘束。
+  const prescriptionLike = productType === "prescription_drug" || productType === "cell_therapy";
+  const productLabel = productType === "cell_therapy" ? "再生醫療製劑" : "處方藥";
 
-  if (productType === "prescription_drug" && consumerChannels.includes(channel)) {
+  if (prescriptionLike && consumerChannels.includes(channel)) {
     findings.push({
       article: "藥事法第67條",
       severity: "violation",
       excerpt: "（依您填寫的產品類型與投放通路判定）",
       reason:
-        "須由醫師處方之藥物，其廣告以登載於學術性醫療刊物為限。本案為處方藥並投放於一般消費者通路，屬條文明文禁止之情形，與文案用字無關。",
+        `須由醫師處方之藥物，其廣告以登載於學術性醫療刊物為限；食品藥物管理署明示刊播媒介亦包含網際網路。本案為${productLabel}並投放於一般消費者通路，屬條文明文禁止之情形，與文案用字無關。`,
+    });
+  }
+
+  if (prescriptionLike && channel === "professional") {
+    findings.push({
+      article: "藥事法第67條",
+      severity: "risk",
+      excerpt: "（依您填寫的產品類型與投放通路判定）",
+      reason:
+        `第67條限定之管道為「學術性醫療刊物」，指的是刊物本身；研討會、業務拜訪等專業場合並非刊物，食品藥物管理署對處方藥於學術性醫療刊物以外之廣告類別採否定見解。本案為${productLabel}，須先確認該素材屬於學術資訊或仿單資料（非廣告），或改於學術性醫療刊物刊登。`,
     });
   }
   if (hasLicense === false) {
