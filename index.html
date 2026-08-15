@@ -8,7 +8,7 @@
       name="description"
       content="ReguFlow MVP: role-aware Taiwan pharma regulatory retrieval with grounded laws, checklist, and process cards."
     />
-    <link rel="stylesheet" href="/styles.css?v=20260815v5" />
+    <link rel="stylesheet" href="/styles.css?v=20260815v7" />
   </head>
   <body>
     <main class="app-shell">
@@ -274,16 +274,6 @@
               </div>
             </article>
 
-            <article class="report-card wide-card hidden" id="answersCard">
-              <div class="section-header">
-                <div>
-                  <p class="section-label">直接回答</p>
-                  <h3>針對您的提問</h3>
-                </div>
-              </div>
-              <div id="directAnswers" class="answers-list"></div>
-            </article>
-
             <article class="report-card wide-card primary-report">
               <div class="section-header">
                 <div>
@@ -293,6 +283,16 @@
                 <span class="score-badge" id="confidenceScore">--</span>
               </div>
               <div id="applicableLaws" class="law-report-list"></div>
+            </article>
+
+            <article class="report-card wide-card hidden" id="answersCard">
+              <div class="section-header">
+                <div>
+                  <p class="section-label">直接回答</p>
+                  <h3>針對您的提問</h3>
+                </div>
+              </div>
+              <div id="directAnswers" class="answers-list"></div>
             </article>
 
             <article class="report-card wide-card">
@@ -331,12 +331,13 @@
               </div>
               <p class="hint-text" id="nhiProvenance"></p>
             </article>
+
           </section>
           </div>
         </section>
       </section>
     </main>
 
-    <script src="/app.js?v=20260815v5"></script>
+    <script src="/app.js?v=20260815v7"></script>
   </body>
 </html>

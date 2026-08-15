@@ -4,7 +4,7 @@ ReguFlow is an AI-native regulatory retrieval prototype for Taiwan pharma and bi
 
 Live demo:
 
-https://reguflow-mvp.onrender.com/?v=20260815v5
+https://reguflow-mvp.onrender.com/?v=20260815v7
 
 API health check:
 
@@ -26,7 +26,7 @@ ReguFlow is designed to reduce hallucination risk in regulatory search. Instead 
 
 Open the live demo:
 
-https://reguflow-mvp.onrender.com/?v=20260815v5
+https://reguflow-mvp.onrender.com/?v=20260815v7
 
 Then fill in:
 
@@ -54,7 +54,7 @@ The output includes:
 
 ## API Status
 
-The app supports OpenAI API mode and local fallback mode.
+The app supports Amazon Bedrock mode and local fallback mode.
 
 Check:
 
@@ -74,7 +74,7 @@ Example successful response:
 
 Modes:
 
-- `openai_ready`: the server has an API key and will call OpenAI.
+- `pipeline_ready`: the server has AWS credentials and will call Amazon Bedrock.
 - `local_fallback`: no API key is configured; the app uses deterministic local logic.
 - `ai_failed_fallback`: an API key exists, but the AI call failed and the app returned a safe local fallback.
 
@@ -96,8 +96,11 @@ copy .env.example .env
 Edit `.env`:
 
 ```text
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_MODEL=gpt-4.1-mini
+AWS_DEFAULT_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_SESSION_TOKEN=your_temporary_session_token
+BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
 PORT=3000
 ```
 
@@ -126,7 +129,7 @@ reguflow-mvp/
   index.html      Frontend layout
   styles.css      B2B SaaS UI styling
   app.js          Browser-side interaction and fallback analysis
-  server.js       Node.js server, API routes, OpenAI integration
+  server.js       Node.js server, API routes, Amazon Bedrock integration
   render.yaml     Render deployment config
   .env.example    Local environment variable template
   package.json    Scripts and project metadata
@@ -140,7 +143,7 @@ reguflow-mvp/
 GET /api/health
 ```
 
-Returns whether OpenAI API mode is configured.
+Returns whether Amazon Bedrock mode is configured.
 
 ### Analyze
 
@@ -183,8 +186,11 @@ Start command: npm start
 Environment variables:
 
 ```text
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_MODEL=gpt-4.1-mini
+AWS_DEFAULT_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_SESSION_TOKEN=your_temporary_session_token
+BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
 ```
 
 Do not commit `.env` or real API keys. The repository intentionally tracks `.env.example` only.

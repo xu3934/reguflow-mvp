@@ -6,7 +6,17 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: OPENAI_MODEL
-        value: gpt-4.1-mini
-      - key: OPENAI_API_KEY
+      - key: AWS_DEFAULT_REGION
+        value: us-east-1
+      - key: AWS_ACCESS_KEY_ID
         sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_SESSION_TOKEN
+        sync: false
+      - key: BEDROCK_MODEL_ID
+        value: amazon.nova-lite-v1:0
+      - key: BEDROCK_FAST_MODEL_ID
+        value: amazon.nova-lite-v1:0
+      - key: BEDROCK_EMBEDDING_MODEL_ID
+        value: amazon.titan-embed-text-v2:0

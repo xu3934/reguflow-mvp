@@ -2,7 +2,10 @@
   "name": "reguflow-mvp",
   "version": "0.2.0",
   "private": true,
-  "description": "ReguFlow MVP with optional OpenAI API backend and local fallback.",
+  "description": "ReguFlow MVP with Amazon Bedrock AI backend and local fallback.",
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.0.0"
+  },
   "scripts": {
     "start": "node server.js",
     "check": "node --check app.js && node --check server.js"

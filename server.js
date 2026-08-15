@@ -1,16 +1,22 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const { BedrockRuntimeClient, ConverseCommand, InvokeModelCommand } = require("@aws-sdk/client-bedrock-runtime");
 
 loadDotEnv();
 
 const PORT = Number(process.env.PORT || 3000);
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+const AWS_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || "us-east-1";
+const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || "amazon.nova-lite-v1:0";
 // Prompt A (pick a mother law from a shortlist) and Prompt B (pull authorizing
 // clauses out of a statute) are classification/extraction, not drafting — a
 // smaller model handles them at a fraction of the latency.
-const OPENAI_FAST_MODEL = process.env.OPENAI_FAST_MODEL || "gpt-4.1-nano";
+const BEDROCK_FAST_MODEL_ID = process.env.BEDROCK_FAST_MODEL_ID || BEDROCK_MODEL_ID;
+const BEDROCK_EMBEDDING_MODEL_ID = process.env.BEDROCK_EMBEDDING_MODEL_ID || "amazon.titan-embed-text-v2:0";
+const AWS_AI_CONFIGURED = Boolean(
+  process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && AWS_REGION && BEDROCK_MODEL_ID
+);
+const bedrockClient = new BedrockRuntimeClient({ region: AWS_REGION });
 
 // Scraped statutes and the sub-laws they authorize change on a legislative
 // timescale, so both are cached across requests. Only successful lookups are
@@ -456,9 +462,11 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === "GET" && url.pathname === "/api/health") {
       return sendJson(res, 200, {
-        apiConfigured: Boolean(OPENAI_API_KEY),
-        model: OPENAI_API_KEY ? OPENAI_MODEL : null,
-        mode: OPENAI_API_KEY ? "pipeline_ready" : "local_fallback",
+        apiConfigured: AWS_AI_CONFIGURED,
+        provider: "aws_bedrock",
+        region: AWS_REGION,
+        model: AWS_AI_CONFIGURED ? BEDROCK_MODEL_ID : null,
+        mode: AWS_AI_CONFIGURED ? "pipeline_ready" : "local_fallback",
         pipeline: "A→Scrape→B→Scrape→C+D",
       });
     }
@@ -499,11 +507,11 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`ReguFlow MVP running at http://localhost:${PORT}`);
-  console.log(OPENAI_API_KEY ? `AI mode enabled with ${OPENAI_MODEL}` : "AI mode disabled. Using local fallback.");
+  console.log(AWS_AI_CONFIGURED ? `AWS Bedrock AI enabled with ${BEDROCK_MODEL_ID} in ${AWS_REGION}` : "AWS Bedrock AI disabled. Using local fallback.");
   // Build the mother-law vectors now so the first real request doesn't pay for
   // it. Failures are already handled inside (retrieval falls back to the full
   // list), so this is fire-and-forget.
-  if (OPENAI_API_KEY) {
+  if (AWS_AI_CONFIGURED) {
     ensureMotherLawEmbeddings()
       .then((cache) => console.log(cache ? `Embedding cache warm (${cache.length} mother laws)` : "Embedding warmup skipped"))
       .catch(() => {});
@@ -521,7 +529,7 @@ async function analyzeWithPipeline(payload) {
   const assessments = assessApplicability(facts, candidates).slice(0, 6);
   const localReport = buildLocalReport(facts, candidates, assessments);
 
-  if (!OPENAI_API_KEY) {
+  if (!AWS_AI_CONFIGURED) {
     return await enrichWithOfficialSubLaws(localReport, facts, assessments);
   }
 
@@ -647,7 +655,7 @@ async function analyzeWithPipeline(payload) {
 
     return {
       mode: "pipeline",
-      model: OPENAI_MODEL,
+      model: BEDROCK_MODEL_ID,
       analyzedAt: new Date().toISOString(),
       facts,
       candidates: candidates.slice(0, 7),
@@ -724,21 +732,20 @@ function searchNhiDrugs(q) {
 // corpus instead of being a fixed hand-typed list.
 // ---------------------------------------------------------------------------
 
-const EMBEDDING_MODEL = "text-embedding-3-small";
 let motherLawEmbeddingsCache = null; // null = not built yet; false = build failed, don't retry every request
 
 async function embedTexts(texts) {
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ model: EMBEDDING_MODEL, input: texts }),
-  });
-  const json = await response.json();
-  if (!response.ok) throw new Error(json.error?.message || `Embedding request failed: ${response.status}`);
-  return json.data.map((item) => item.embedding);
+  return Promise.all(texts.map(async (inputText) => {
+    const response = await bedrockClient.send(new InvokeModelCommand({
+      modelId: BEDROCK_EMBEDDING_MODEL_ID,
+      contentType: "application/json",
+      accept: "application/json",
+      body: JSON.stringify({ inputText, dimensions: 1024, normalize: true }),
+    }));
+    const json = JSON.parse(new TextDecoder().decode(response.body));
+    if (!Array.isArray(json.embedding)) throw new Error("Amazon Bedrock embedding 回應缺少向量資料");
+    return json.embedding;
+  }));
 }
 
 function cosineSimilarity(a, b) {
@@ -755,7 +762,7 @@ function cosineSimilarity(a, b) {
 
 async function ensureMotherLawEmbeddings() {
   if (motherLawEmbeddingsCache) return motherLawEmbeddingsCache;
-  if (motherLawEmbeddingsCache === false || !OPENAI_API_KEY) return null;
+  if (motherLawEmbeddingsCache === false || !AWS_AI_CONFIGURED) return null;
   const motherLaws = LAW_INDEX.filter((l) => l.level === "母法");
   try {
     const vectors = await embedTexts(motherLaws.map((l) => `${l.title}：${l.articleText}`));
@@ -878,7 +885,7 @@ async function checkAdCompliance(payload) {
   const structural = structuralAdFindings(context);
   const lawText = await fetchAdChapterText();
 
-  if (!OPENAI_API_KEY) {
+  if (!AWS_AI_CONFIGURED) {
     return {
       mode: "structural_only",
       checkedAt: new Date().toISOString(),
@@ -920,7 +927,7 @@ async function checkAdCompliance(payload) {
 
   return {
     mode,
-    model: OPENAI_MODEL,
+    model: BEDROCK_MODEL_ID,
     checkedAt: new Date().toISOString(),
     context,
     structural_findings: structural,
@@ -966,7 +973,7 @@ ${content}
 - 若文案沒有明顯問題，findings 回傳空陣列，不要為了湊數而虛構問題。
 只輸出 JSON。`;
 
-  const text = await callOpenAI({
+  const text = await callBedrock({
     instructions:
       "你是台灣藥物廣告法規審查專家。只根據提供的藥事法條文判斷，不得引用其他法規或自行推論未載明的規定。逐字引用文案原文作為佐證。只輸出 JSON。",
     input,
@@ -998,11 +1005,11 @@ async function runPromptA(payload) {
 以下為依語意相關性排序、最可能相關的母法清單供參考：
 ${lawListText}`;
 
-  const text = await callOpenAI({
+  const text = await callBedrock({
     instructions:
       "你是台灣生醫法規專家。請根據使用者情境判斷最相關的母法 PCode 與健保品項查詢字串，只輸出 JSON，不要有其他說明。",
     input,
-    model: OPENAI_FAST_MODEL,
+    model: BEDROCK_FAST_MODEL_ID,
   });
 
   const result = parseJsonObject(text);
@@ -1033,11 +1040,11 @@ ${motherLawText}
 
 只輸出 JSON 陣列，不要有其他說明。`;
 
-  const text = await callOpenAI({
+  const text = await callBedrock({
     instructions:
       "你是台灣法規文本分析專家。請從母法條文中識別授權子法的條款，嚴格以 JSON 陣列格式輸出，不要有任何其他說明。",
     input,
-    model: OPENAI_FAST_MODEL,
+    model: BEDROCK_FAST_MODEL_ID,
   });
 
   const result = parseJsonSafe(text);
@@ -1085,7 +1092,7 @@ direct_answers 的規則：請先從使用者的情境描述中辨識出他「�
 
   const baseInstructions =
     "你是台灣生醫法規顧問，專為 BD、PM、RA、QA 及物流人員撰寫法規摘要。只根據提供的法規內容作答，不得虛構法條或引用，但摘要與 Checklist 必須針對使用者描述的具體情境客製化，不要只是複述通用法規概要。只輸出 JSON。";
-  const text = await callOpenAI({
+  const text = await callBedrock({
     instructions: profile ? `${baseInstructions}\n\n職能視角要求：${profile.promptC}` : baseInstructions,
     input,
   });
@@ -1115,7 +1122,7 @@ ${allLawTexts}
 
 只輸出 JSON 陣列，不要有其他說明。`;
 
-  const text = await callOpenAI({
+  const text = await callBedrock({
     instructions:
       "你是台灣生醫法規顧問。請根據提供的法規內容規劃 3 個作業階段，嚴格以 JSON 陣列格式輸出，不要有任何其他說明。",
     input,
@@ -1581,21 +1588,23 @@ function buildLocalReport(facts, candidates, assessments) {
 }
 
 // ---------------------------------------------------------------------------
-// OpenAI caller
+// Amazon Bedrock caller
 // ---------------------------------------------------------------------------
 
-async function callOpenAI({ instructions, input, model }) {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ model: model || OPENAI_MODEL, instructions, input, temperature: 0 }),
-  });
-  const json = await response.json();
-  if (!response.ok) throw new Error(json.error?.message || `OpenAI request failed: ${response.status}`);
-  return extractOutputText(json);
+async function callBedrock({ instructions, input, model }) {
+  const response = await bedrockClient.send(new ConverseCommand({
+    modelId: model || BEDROCK_MODEL_ID,
+    system: [{ text: instructions }],
+    messages: [{ role: "user", content: [{ text: input }] }],
+    inferenceConfig: { temperature: 0, maxTokens: 4096 },
+  }));
+  const text = response.output?.message?.content
+    ?.filter((item) => typeof item.text === "string")
+    .map((item) => item.text)
+    .join("\n")
+    .trim();
+  if (!text) throw new Error("Amazon Bedrock 未回傳文字內容");
+  return text;
 }
 
 // ---------------------------------------------------------------------------
