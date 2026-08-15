@@ -6,7 +6,7 @@ loadDotEnv();
 
 const PORT = Number(process.env.PORT || 3000);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const APP_VERSION = "20260815v16";
+const APP_VERSION = "20260815v17";
 const OPENAI_MODEL = normalizeOpenAIModelId(process.env.OPENAI_MODEL, "gpt-5.6-luna");
 // Prompt A (pick a mother law from a shortlist) and Prompt B (pull authorizing
 // clauses out of a statute) are classification/extraction, not drafting — a

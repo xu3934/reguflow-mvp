@@ -4,7 +4,7 @@ Rxplain is an AI-native regulatory retrieval prototype for Taiwan pharma and bio
 
 Live demo:
 
-https://reguflow-mvp.onrender.com/?v=20260815v16
+https://reguflow-mvp.onrender.com/?v=20260815v17
 
 API health check:
 
@@ -26,7 +26,7 @@ Rxplain is designed to reduce hallucination risk in regulatory search. Instead o
 
 Open the live demo:
 
-https://reguflow-mvp.onrender.com/?v=20260815v16
+https://reguflow-mvp.onrender.com/?v=20260815v17
 
 Then fill in:
 
