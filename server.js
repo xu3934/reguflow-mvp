@@ -565,12 +565,32 @@ async function analyzeWithPipeline(payload) {
       .filter((r) => r.status === "fulfilled" && r.value && r.value.text)
       .map((r) => r.value);
 
+    // Trace what the authorization-chain step actually produced. Without this
+    // it is impossible to tell a sub-law that was never identified from one
+    // that was identified but failed to resolve to a pcode.
+    const subLawTrace = {
+      motherLaw: { pcode, name: motherLawName, chars: motherLawText.length },
+      promptBRefs: subLawRefs.map((ref) => ({
+        article: ref.article || null,
+        search_tag: ref.search_tag || null,
+      })),
+      resolution: subLawResults.map((r, i) => ({
+        tag: subLawTags[i],
+        pcode: r.status === "fulfilled" && r.value ? r.value.pcode : null,
+        chars: r.status === "fulfilled" && r.value ? r.value.text.length : 0,
+        status: r.status === "rejected" ? "error" : r.value ? "fetched" : "pcode_not_found",
+      })),
+    };
+
     // Step 3e: Build combined law text string (cap at 20000 chars)
     let allLawTexts = `【母法: ${motherLawName || pcode}】\n${motherLawText}`;
     for (const sub of subLawTexts) {
       allLawTexts += `\n\n【子法: ${sub.tag} (${sub.pcode})】\n${sub.text}`;
     }
+    const preCapLength = allLawTexts.length;
     if (allLawTexts.length > 20000) allLawTexts = allLawTexts.slice(0, 20000);
+    subLawTrace.combinedChars = preCapLength;
+    subLawTrace.truncated = preCapLength > 20000;
 
     const role = facts.role;
     const scenario = facts.rawScenario;
@@ -650,6 +670,7 @@ async function analyzeWithPipeline(payload) {
       traceability: buildTraceability(assessments),
       nhi_competitors: nhiCompetitors,
       direct_answers,
+      sub_law_trace: subLawTrace,
     };
   } catch (err) {
     return { ...localReport, mode: "ai_failed_fallback", aiError: err.message };
