@@ -371,7 +371,16 @@ const progressMeta = document.querySelector("#progressMeta");
 const results = document.querySelector("#results");
 const modeBadge = document.querySelector("#modeBadge");
 const apiStatus = document.querySelector("#apiStatus");
-const sidebarStatus = document.querySelector("#sidebarStatus");
+const sidebarStatusText = document.querySelector("#sidebarStatusText");
+const sidebarStatusLight = document.querySelector("#sidebarStatusLight");
+
+function setSidebarStatus(label, state = "checking") {
+  sidebarStatusText.textContent = label;
+  sidebarStatusLight.classList.remove("is-checking", "is-warning", "is-error");
+  if (state === "checking") sidebarStatusLight.classList.add("is-checking");
+  if (state === "warning") sidebarStatusLight.classList.add("is-warning");
+  if (state === "error") sidebarStatusLight.classList.add("is-error");
+}
 
 function setConditionsOpen(open) {
   advancedConditions.classList.toggle("hidden", !open);
@@ -419,11 +428,11 @@ analyzeButton.addEventListener("click", async () => {
   startProgressTracking();
   const report = await analyzeScenarioWithApiFallback(payload);
   if (report.mode === "pipeline") {
-    sidebarStatus.textContent = "🟢 後端與 AI 已驗證";
+    setSidebarStatus("後端與 AI 已驗證", "connected");
   } else if (report.mode === "ai_failed_fallback") {
-    sidebarStatus.textContent = "🟠 後端正常／AI 分析失敗";
+    setSidebarStatus("後端正常／AI 分析失敗", "warning");
   } else if (report.mode === "api_failed") {
-    sidebarStatus.textContent = "🔴 後端未連線";
+    setSidebarStatus("後端未連線", "error");
   }
   renderReport(report);
   renderNhiCompetitors(nhiQueryInput.value.trim(), report);
@@ -918,7 +927,7 @@ async function checkApiHealth() {
   if (location.protocol === "file:") {
     setModeBadge("Local file mode", "local_fallback");
     apiStatus.textContent = "目前直接開啟 HTML 檔案，不會呼叫後端或 OpenAI API。";
-    sidebarStatus.textContent = "Offline - local file";
+    setSidebarStatus("本機檔案模式", "error");
     return;
   }
 
@@ -933,20 +942,20 @@ async function checkApiHealth() {
         : `模型：${health.model}`;
       const versionText = health.version ? `版本：${health.version}。` : "";
       apiStatus.textContent = `🟢 後端 API 已連線，OpenAI 連線驗證成功。${versionText}${modelText}。管線：${health.pipeline || "A→法務部爬取→混合模型分析"}`;
-      sidebarStatus.textContent = "🟢 後端與 AI 已驗證";
+      setSidebarStatus("後端與 AI 已驗證", "connected");
     } else if (health.apiConfigured) {
       setModeBadge("AI 連線異常", "ai_failed_fallback");
       apiStatus.textContent = `🟠 後端 API 已連線，但 OpenAI 驗證失敗；分析時將使用法規擷取備援。${health.aiError ? `原因：${health.aiError}` : ""}`;
-      sidebarStatus.textContent = "🟠 後端正常／AI 未連線";
+      setSidebarStatus("後端正常／AI 未連線", "warning");
     } else {
       setModeBadge("本地備援", "local_fallback");
       apiStatus.textContent = "🟡 後端 API 已連線，但尚未設定 OpenAI API Key；使用法規擷取備援，不會產生 AI 費用。";
-      sidebarStatus.textContent = "🟡 後端正常／AI 未設定";
+      setSidebarStatus("後端正常／AI 未設定", "warning");
     }
   } catch (error) {
     setModeBadge("後端未連線", "api_failed_fallback");
     apiStatus.textContent = `🔴 無法連到後端，會使用本地 fallback。原因: ${error.message}`;
-    sidebarStatus.textContent = "🔴 後端未連線";
+    setSidebarStatus("後端未連線", "error");
   }
 }
 
@@ -1092,64 +1101,119 @@ downloadFlowchartButton.addEventListener("click", () => {
 });
 
 function downloadFlowchartPng(stages) {
+  const flowStages = stages.slice(0, 3);
+  const scale = 2;
+  const logicalWidth = 1440;
+  const marginX = 56;
+  const gap = 28;
+  const cardTop = 142;
+  const cardWidth = (logicalWidth - marginX * 2 - gap * 2) / 3;
   const canvas = document.createElement("canvas");
-  canvas.width = 1600;
-  canvas.height = 700;
-  const context = canvas.getContext("2d");
-  context.fillStyle = "#eef4f1";
-  context.fillRect(0, 0, canvas.width, canvas.height);
+  canvas.width = logicalWidth * scale;
+  canvas.height = 900 * scale;
+  let context = canvas.getContext("2d");
+  context.scale(scale, scale);
 
+  const preparedStages = flowStages.map((stage) => prepareFlowStage(context, stage, cardWidth));
+  const cardHeight = Math.max(340, ...preparedStages.map((stage) => stage.height));
+  const logicalHeight = Math.ceil(cardTop + cardHeight + 48);
+  canvas.height = logicalHeight * scale;
+  context = canvas.getContext("2d");
+  context.scale(scale, scale);
+
+  context.fillStyle = "#f5f8f6";
+  context.fillRect(0, 0, logicalWidth, logicalHeight);
+  context.fillStyle = "#2f7d73";
+  context.font = '700 14px "Microsoft JhengHei", sans-serif';
+  context.fillText("RXPLAIN · 合規流程", marginX, 38);
   context.fillStyle = "#17201c";
-  context.font = '800 42px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-  context.fillText("法規審查與供應鏈流程圖", 70, 78);
-  context.fillStyle = "#68746d";
-  context.font = '20px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-  context.fillText(`產出時間：${new Date().toLocaleString("zh-TW")}`, 70, 114);
+  context.font = '800 34px "Microsoft JhengHei", sans-serif';
+  context.fillText("法規審查與供應鏈流程圖", marginX, 82);
+  context.fillStyle = "#6d7973";
+  context.font = '14px "Microsoft JhengHei", sans-serif';
+  context.textAlign = "right";
+  context.fillText(`產出時間 ${new Date().toLocaleString("zh-TW")}`, logicalWidth - marginX, 78);
+  context.textAlign = "left";
+  context.strokeStyle = "#d9e2dd";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(marginX, 108);
+  context.lineTo(logicalWidth - marginX, 108);
+  context.stroke();
 
-  const gap = 34;
-  const cardWidth = (canvas.width - 140 - gap * 2) / 3;
-  const cardTop = 155;
-  const cardHeight = 470;
-  stages.slice(0, 3).forEach((stage, index) => {
-    const x = 70 + index * (cardWidth + gap);
-    context.fillStyle = "#ffffff";
-    context.strokeStyle = "#cfdcd5";
-    context.lineWidth = 3;
-    roundRect(context, x, cardTop, cardWidth, cardHeight, 18);
+  for (let index = 0; index < flowStages.length - 1; index += 1) {
+    const startX = marginX + (index + 1) * cardWidth + index * gap + 5;
+    const endX = startX + gap - 10;
+    const connectorY = cardTop + 42;
+    context.strokeStyle = "#78a99d";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(startX, connectorY);
+    context.lineTo(endX, connectorY);
+    context.lineTo(endX - 7, connectorY - 5);
+    context.moveTo(endX, connectorY);
+    context.lineTo(endX - 7, connectorY + 5);
+    context.stroke();
+  }
+
+  preparedStages.forEach((stage, index) => {
+    const x = marginX + index * (cardWidth + gap);
+    context.fillStyle = "#fffefb";
+    context.strokeStyle = "#cfdad4";
+    context.lineWidth = 1.5;
+    roundRect(context, x, cardTop, cardWidth, cardHeight, 16);
     context.fill();
     context.stroke();
 
     context.fillStyle = "#0f766e";
-    roundRect(context, x, cardTop, cardWidth, 16, 8);
+    roundRect(context, x, cardTop, cardWidth, 7, 7);
     context.fill();
 
-    context.fillStyle = "#2f7d73";
-    context.font = '700 18px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-    context.fillText(compactFlowText(`階段 ${index + 1} · ${stage.owner || "負責單位待確認"}`, 28), x + 24, cardTop + 55);
+    context.fillStyle = "#0f665d";
+    context.beginPath();
+    context.arc(x + 38, cardTop + 44, 18, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = "#ffffff";
+    context.font = '800 13px "Microsoft JhengHei", sans-serif';
+    context.textAlign = "center";
+    context.fillText(String(index + 1).padStart(2, "0"), x + 38, cardTop + 49);
+    context.textAlign = "left";
 
+    context.fillStyle = "#2f6f65";
+    context.font = '700 15px "Microsoft JhengHei", sans-serif';
+    drawCanvasLines(context, stage.ownerLines, x + 68, cardTop + 49, 21);
+
+    let y = cardTop + 100;
     context.fillStyle = "#17201c";
-    context.font = '800 27px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-    let y = drawWrappedText(context, compactFlowText(stage.stage_title || "未命名階段", 28), x + 24, cardTop + 105, cardWidth - 48, 36);
+    context.font = '800 24px "Microsoft JhengHei", sans-serif';
+    drawCanvasLines(context, stage.titleLines, x + 26, y, 32);
+    y += stage.titleLines.length * 32 + 10;
 
-    context.fillStyle = "#b78103";
-    context.font = '700 18px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-    y = drawWrappedText(context, compactFlowText(stage.law_name || "法規待確認", 38), x + 24, y + 18, cardWidth - 48, 27);
+    const lawHeight = 34 + stage.lawLines.length * 23;
+    context.fillStyle = "#eef5f1";
+    roundRect(context, x + 22, y, cardWidth - 44, lawHeight, 10);
+    context.fill();
+    context.fillStyle = "#6b7972";
+    context.font = '700 11px "Microsoft JhengHei", sans-serif';
+    context.fillText("主要法規", x + 38, y + 20);
+    context.fillStyle = "#285f57";
+    context.font = '700 16px "Microsoft JhengHei", sans-serif';
+    drawCanvasLines(context, stage.lawLines, x + 38, y + 43, 23);
+    y += lawHeight + 22;
 
-    context.fillStyle = "#17201c";
-    context.font = '20px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-    for (const point of (stage.control_points || []).slice(0, 3)) {
+    context.fillStyle = "#7b8680";
+    context.font = '700 11px "Microsoft JhengHei", sans-serif';
+    context.fillText("控制重點", x + 26, y);
+    y += 18;
+    context.font = '17px "Microsoft JhengHei", sans-serif';
+    for (const pointLines of stage.pointLines) {
       context.fillStyle = "#0f766e";
       context.beginPath();
-      context.arc(x + 31, y + 17, 5, 0, Math.PI * 2);
+      context.arc(x + 32, y + 8, 4, 0, Math.PI * 2);
       context.fill();
-      context.fillStyle = "#17201c";
-      y = drawWrappedText(context, compactFlowText(point, 38), x + 47, y + 23, cardWidth - 70, 28) + 9;
-    }
-
-    if (index < 2) {
-      context.fillStyle = "#0f766e";
-      context.font = '800 46px sans-serif';
-      context.fillText("→", x + cardWidth + 7, cardTop + cardHeight / 2);
+      context.fillStyle = "#26322d";
+      drawCanvasLines(context, pointLines, x + 48, y + 14, 26);
+      y += pointLines.length * 26 + 9;
     }
   });
 
@@ -1166,25 +1230,58 @@ function downloadFlowchartPng(stages) {
   }, "image/png");
 }
 
+function prepareFlowStage(context, stage, cardWidth) {
+  const textWidth = cardWidth - 52;
+  context.font = '700 15px "Microsoft JhengHei", sans-serif';
+  const ownerLines = getCanvasLines(context, stage.owner || "負責單位待確認", cardWidth - 94, 1);
+  context.font = '800 24px "Microsoft JhengHei", sans-serif';
+  const titleLines = getCanvasLines(context, stage.stage_title || "未命名階段", textWidth, 2);
+  context.font = '700 16px "Microsoft JhengHei", sans-serif';
+  const lawLines = getCanvasLines(context, stage.law_name || "法規待確認", cardWidth - 76, 2);
+  context.font = '17px "Microsoft JhengHei", sans-serif';
+  const pointLines = (stage.control_points || []).slice(0, 3).map((point) =>
+    getCanvasLines(context, point, cardWidth - 78, 2)
+  );
+  const height = 100
+    + titleLines.length * 32 + 10
+    + 34 + lawLines.length * 23 + 22
+    + 18
+    + pointLines.reduce((sum, lines) => sum + lines.length * 26 + 9, 0)
+    + 22;
+  return { ownerLines, titleLines, lawLines, pointLines, height };
+}
+
 function compactFlowText(value, maxLength) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
-function drawWrappedText(context, text, x, y, maxWidth, lineHeight) {
+function getCanvasLines(context, text, maxWidth, maxLines = Infinity) {
+  const lines = [];
   let line = "";
   for (const character of String(text)) {
     const candidate = line + character;
     if (context.measureText(candidate).width > maxWidth && line) {
-      context.fillText(line, x, y);
+      lines.push(line);
       line = character;
-      y += lineHeight;
     } else {
       line = candidate;
     }
   }
-  if (line) context.fillText(line, x, y);
-  return y;
+  if (line) lines.push(line);
+  if (lines.length <= maxLines) return lines.length ? lines : [""];
+
+  const visible = lines.slice(0, maxLines);
+  let lastLine = visible[maxLines - 1];
+  while (lastLine && context.measureText(`${lastLine}…`).width > maxWidth) {
+    lastLine = lastLine.slice(0, -1);
+  }
+  visible[maxLines - 1] = `${lastLine}…`;
+  return visible;
+}
+
+function drawCanvasLines(context, lines, x, y, lineHeight) {
+  lines.forEach((line, index) => context.fillText(line, x, y + index * lineHeight));
 }
 
 function roundRect(context, x, y, width, height, radius) {
