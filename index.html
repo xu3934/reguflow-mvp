@@ -9,7 +9,7 @@
       content="Rxplain：台灣醫藥法規自動化檢索、待辦清單與合規流程圖。"
     />
     <meta name="theme-color" content="#f3f1eb" />
-    <link rel="stylesheet" href="/styles.css?v=20260815v18" />
+    <link rel="stylesheet" href="/styles.css?v=20260815v17p1" />
   </head>
   <body>
     <main class="app-shell">
@@ -198,8 +198,8 @@
           </div>
 
           <div id="modeRetrieval">
-          <section class="input-section" aria-labelledby="input-title">
-            <div class="section-header">
+          <section class="input-section" aria-label="法規情境輸入">
+            <div class="section-header hidden" aria-hidden="true">
               <div>
                 <p class="section-label">法規情境</p>
                 <h3 id="input-title">情境與條件輸入</h3>
@@ -208,77 +208,101 @@
               <span class="status-pill" id="modeBadge">檢查連線中...</span>
             </div>
 
-            <div class="api-status" id="apiStatus">正在檢查後端與 AI API 狀態。</div>
+            <div class="api-status hidden" id="apiStatus">正在檢查後端與 AI API 狀態。</div>
 
             <label class="input-label" for="scenario">
               請描述您的角色定位、醫藥品引入情境與需求：
             </label>
-            <textarea
-              id="scenario"
-              rows="5"
-              placeholder="例如：我是代理商 BD，要引入細胞製劑，請告訴我相關的查驗與物流規範..."
-            ></textarea>
-
-            <div class="form-grid">
-              <label>
-                目標市場
-                <select id="market">
-                  <option value="台灣">台灣</option>
-                </select>
-              </label>
-              <label>
-                產品類型
-                <select id="productType">
-                  <option value="auto">自動判斷</option>
-                  <option value="prescription_drug">處方藥</option>
-                  <option value="otc_drug">指示藥</option>
-                  <option value="general_drug">成藥</option>
-                  <option value="cell_therapy">細胞製劑 / 再生醫療製劑</option>
-                </select>
-              </label>
-              <label>
-                角色定位
-                <select id="role">
-                  <option value="進口代理商">進口代理商</option>
-                  <option value="研發藥廠">研發藥廠</option>
-                  <option value="代工藥廠">代工藥廠</option>
-                  <option value="原料藥廠">原料藥廠</option>
-                  <option value="供應鏈物流">供應鏈 / 物流</option>
-                </select>
-              </label>
-              <label>
-                職能視角
-                <select id="jobFunction">
-                  <option value="">不指定</option>
-                  <option value="BD">BD 商務開發</option>
-                  <option value="PM">PM 產品經理</option>
-                  <option value="RA">RA 法規事務</option>
-                  <option value="QA">QA 品質保證</option>
-                </select>
-              </label>
-              <label>
-                競品查詢（選填）
-                <input
-                  id="nhiQuery"
-                  type="text"
-                  placeholder="主成分英文或 ATC 碼，如 PEMBROLIZUMAB"
-                />
-              </label>
+            <div class="scenario-composer">
+              <textarea
+                id="scenario"
+                rows="4"
+                placeholder="輸入您的產品、角色與法規問題…"
+              ></textarea>
+              <div class="composer-toolbar">
+                <button
+                  class="composer-condition-button"
+                  id="toggleConditions"
+                  type="button"
+                  aria-expanded="false"
+                  aria-controls="advancedConditions"
+                >
+                  <span class="composer-plus" aria-hidden="true">＋</span>
+                  <span>條件選單</span>
+                </button>
+                <button class="composer-submit" id="analyze" type="button">
+                  <span>開始檢索</span>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+                </button>
+              </div>
             </div>
 
-            <fieldset class="checkbox-group">
-              <legend>法規類型</legend>
-              <label><input type="checkbox" name="lawType" value="運輸 GDP" checked /> 運輸 GDP</label>
-              <label><input type="checkbox" name="lawType" value="生產 GMP" checked /> 生產 GMP</label>
-              <label><input type="checkbox" name="lawType" value="查驗登記" checked /> 查驗登記</label>
-              <label><input type="checkbox" name="lawType" value="供應來源與流向" /> 供應來源與流向</label>
-              <label><input type="checkbox" name="lawType" value="健保給付" /> 健保給付</label>
-              <label><input type="checkbox" name="lawType" value="廣告與衛教" /> 廣告與衛教</label>
-            </fieldset>
+            <div class="conditions-panel hidden" id="advancedConditions">
+              <div class="conditions-heading">
+                <div>
+                  <strong>進階條件</strong>
+                  <span>選填；未展開時仍會沿用目前設定。</span>
+                </div>
+                <button class="conditions-close" id="closeConditions" type="button" aria-label="收合條件選單">×</button>
+              </div>
 
-            <button class="primary-button" id="analyze" type="button">
-              開始法規檢索與生成報告
-            </button>
+              <div class="form-grid">
+                <label>
+                  目標市場
+                  <select id="market">
+                    <option value="台灣">台灣</option>
+                  </select>
+                </label>
+                <label>
+                  產品類型
+                  <select id="productType">
+                    <option value="auto">自動判斷</option>
+                    <option value="prescription_drug">處方藥</option>
+                    <option value="otc_drug">指示藥</option>
+                    <option value="general_drug">成藥</option>
+                    <option value="cell_therapy">細胞製劑 / 再生醫療製劑</option>
+                  </select>
+                </label>
+                <label>
+                  角色定位
+                  <select id="role">
+                    <option value="進口代理商">進口代理商</option>
+                    <option value="研發藥廠">研發藥廠</option>
+                    <option value="代工藥廠">代工藥廠</option>
+                    <option value="原料藥廠">原料藥廠</option>
+                    <option value="供應鏈物流">供應鏈 / 物流</option>
+                  </select>
+                </label>
+                <label>
+                  職能視角
+                  <select id="jobFunction">
+                    <option value="">不指定</option>
+                    <option value="BD">BD 商務開發</option>
+                    <option value="PM">PM 產品經理</option>
+                    <option value="RA">RA 法規事務</option>
+                    <option value="QA">QA 品質保證</option>
+                  </select>
+                </label>
+                <label>
+                  競品查詢（選填）
+                  <input
+                    id="nhiQuery"
+                    type="text"
+                    placeholder="主成分英文或 ATC 碼，如 PEMBROLIZUMAB"
+                  />
+                </label>
+              </div>
+
+              <fieldset class="checkbox-group">
+                <legend>法規類型</legend>
+                <label><input type="checkbox" name="lawType" value="運輸 GDP" checked /> 運輸 GDP</label>
+                <label><input type="checkbox" name="lawType" value="生產 GMP" checked /> 生產 GMP</label>
+                <label><input type="checkbox" name="lawType" value="查驗登記" checked /> 查驗登記</label>
+                <label><input type="checkbox" name="lawType" value="供應來源與流向" /> 供應來源與流向</label>
+                <label><input type="checkbox" name="lawType" value="健保給付" /> 健保給付</label>
+                <label><input type="checkbox" name="lawType" value="廣告與衛教" /> 廣告與衛教</label>
+              </fieldset>
+            </div>
           </section>
 
           <section class="progress-section hidden" id="progressSection" aria-live="polite">
@@ -367,6 +391,6 @@
       </section>
     </main>
 
-    <script src="/app.js?v=20260815v18"></script>
+    <script src="/app.js?v=20260815v17p1"></script>
   </body>
 </html>

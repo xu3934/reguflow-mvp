@@ -361,6 +361,9 @@ const nhiQueryInput = document.querySelector("#nhiQuery");
 const marketInput = document.querySelector("#market");
 const analyzeButton = document.querySelector("#analyze");
 const loadDemoButton = document.querySelector("#loadDemo");
+const toggleConditionsButton = document.querySelector("#toggleConditions");
+const closeConditionsButton = document.querySelector("#closeConditions");
+const advancedConditions = document.querySelector("#advancedConditions");
 const progressSection = document.querySelector("#progressSection");
 const progressText = document.querySelector("#progressText");
 const progressBar = document.querySelector("#progressBar");
@@ -369,6 +372,27 @@ const results = document.querySelector("#results");
 const modeBadge = document.querySelector("#modeBadge");
 const apiStatus = document.querySelector("#apiStatus");
 const sidebarStatus = document.querySelector("#sidebarStatus");
+
+function setConditionsOpen(open) {
+  advancedConditions.classList.toggle("hidden", !open);
+  toggleConditionsButton.setAttribute("aria-expanded", String(open));
+}
+
+toggleConditionsButton.addEventListener("click", () => {
+  setConditionsOpen(advancedConditions.classList.contains("hidden"));
+});
+
+closeConditionsButton.addEventListener("click", () => {
+  setConditionsOpen(false);
+  toggleConditionsButton.focus();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !advancedConditions.classList.contains("hidden")) {
+    setConditionsOpen(false);
+    toggleConditionsButton.focus();
+  }
+});
 
 loadDemoButton.addEventListener("click", () => {
   scenarioInput.value = GOLDEN_SCENARIO;
@@ -386,6 +410,7 @@ analyzeButton.addEventListener("click", async () => {
     return;
   }
 
+  setConditionsOpen(false);
   analyzeButton.disabled = true;
   results.classList.add("hidden");
   progressSection.classList.remove("hidden");
