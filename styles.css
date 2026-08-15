@@ -162,7 +162,7 @@ h3 {
 
 .pipeline-list {
   display: grid;
-  gap: 12px;
+  gap: 7px;
   margin: 16px 0 0;
   padding: 0;
   list-style: none;
@@ -170,17 +170,19 @@ h3 {
 
 .pipeline-list li {
   position: relative;
-  padding: 12px 12px 12px 42px;
+  padding: 9px 10px 9px 38px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 8px;
   color: #dce9e4;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .pipeline-list li::before {
   content: attr(data-step);
   position: absolute;
-  left: 12px;
-  top: 12px;
+  left: 9px;
+  top: 8px;
   display: grid;
   width: 22px;
   height: 22px;
@@ -195,6 +197,17 @@ h3 {
 .pipeline-list li.active {
   border-color: rgba(159, 225, 214, 0.78);
   background: rgba(159, 225, 214, 0.1);
+  color: #ffffff;
+  box-shadow: inset 3px 0 0 #9fe1d6;
+}
+
+.pipeline-list li.completed {
+  opacity: 0.66;
+}
+
+.pipeline-list li.completed::before {
+  content: "✓";
+  background: #2f7d73;
 }
 
 .source-card p:last-child {
@@ -497,6 +510,13 @@ input[type="text"] {
   margin: 0;
   color: var(--muted);
   font-size: 14px;
+}
+
+.progress-meta {
+  margin: 8px 0 10px;
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .results-grid {

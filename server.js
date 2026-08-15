@@ -480,6 +480,28 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, report);
     }
 
+    if (req.method === "POST" && url.pathname === "/api/v1/analyze-stream") {
+      if (isRateLimited(req)) return sendJson(res, 429, { error: "rate_limited", message: "請求過於頻繁，請稍後再試。" });
+      const payload = await readJson(req);
+      const startedAt = Date.now();
+      res.writeHead(200, {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+      const pushProgress = (step, message) => {
+        res.write(`${JSON.stringify({ type: "progress", step, message, elapsed_ms: Date.now() - startedAt })}\n`);
+      };
+      try {
+        const report = await analyzeWithPipeline(payload, pushProgress);
+        res.write(`${JSON.stringify({ type: "result", report, elapsed_ms: Date.now() - startedAt })}\n`);
+      } catch (error) {
+        res.write(`${JSON.stringify({ type: "error", message: error.message, elapsed_ms: Date.now() - startedAt })}\n`);
+      }
+      return res.end();
+    }
+
     if (req.method === "POST" && url.pathname === "/api/v1/compliance-check") {
       if (isRateLimited(req)) return sendJson(res, 429, { error: "rate_limited", message: "請求過於頻繁，請稍後再試。" });
       const payload = await readJson(req);
@@ -519,19 +541,22 @@ server.listen(PORT, () => {
 // Pipeline orchestrator
 // ---------------------------------------------------------------------------
 
-async function analyzeWithPipeline(payload) {
+async function analyzeWithPipeline(payload, onProgress = () => {}) {
   // Step 1: always compute local data first (used as fallback at every stage)
+  onProgress(0, "解析角色、產品、運輸情境與需要補充的事實");
   const facts = extractFacts(payload);
   const candidates = retrieveCandidateLaws(facts);
   const assessments = assessApplicability(facts, candidates).slice(0, 6);
   const localReport = buildLocalReport(facts, candidates, assessments);
 
   if (!OPENAI_API_KEY) {
+    onProgress(4, "未設定 OpenAI Key，改用規則比對並抓取法務部正式條文");
     return await enrichWithOfficialSubLaws(localReport, facts, assessments);
   }
 
   try {
     // Step 3a: Prompt A — identify mother law PCode + competitor query
+    onProgress(1, "OpenAI 正在辨識最相關母法與健保查詢詞");
     let pcode;
     let motherLawName;
     let competitorQuery = "";
@@ -549,11 +574,13 @@ async function analyzeWithPipeline(payload) {
     }
 
     // Step 3b: Fetch mother law text
+    onProgress(2, `正在從法務部下載母法全文：${motherLawName || pcode}`);
     const motherLawText = await fetchLawText(pcode);
 
     // Prefer the Ministry of Justice's authoritative child-law metadata.
     // Prompt B is only a fallback: a generated search tag is not necessarily
     // an exact law name and therefore cannot be the primary lookup key.
+    onProgress(3, "正在讀取母法授權依據與授權子法清單");
     const authorizedSubLaws = await fetchAuthorizedSubLaws(pcode);
     let subLawRefs = [];
     if (!authorizedSubLaws.length) {
@@ -567,6 +594,7 @@ async function analyzeWithPipeline(payload) {
     // Resolve and fetch relevant child statutes in parallel.
     const selectedAuthorized = rankAuthorizedSubLaws(authorizedSubLaws, facts).slice(0, 6);
     const fallbackTags = subLawRefs.slice(0, 4).map((ref) => ref.search_tag).filter(Boolean);
+    onProgress(4, `正在下載並逐條比對 ${selectedAuthorized.length || fallbackTags.length} 部候選子法`);
     const subLawResults = await Promise.allSettled(
       (selectedAuthorized.length ? selectedAuthorized : fallbackTags.map((tag) => ({ title: tag }))).map(async (ref) => {
         const subPcode = ref.pcode || await findPcodeByName(ref.title);
@@ -608,11 +636,13 @@ async function analyzeWithPipeline(payload) {
     }
 
     // Step 3f: Run Prompt C and Prompt D in parallel
+    onProgress(5, "OpenAI 正在判斷法條適用性、缺漏事實與角色影響");
     const [resultC, resultD] = await Promise.allSettled([
       runPromptC(allLawTexts, role, scenario, profile, competitorText),
       runPromptD(allLawTexts, role, scenario, profile),
     ]);
 
+    onProgress(6, "正在整理重點摘要、逐條待辦清單與直接回答");
     const promptCData = resultC.status === "fulfilled" ? resultC.value : null;
     const promptDData = resultD.status === "fulfilled" ? resultD.value : null;
 
@@ -621,6 +651,7 @@ async function analyzeWithPipeline(payload) {
     // may omit UI fields or combine several article numbers into one record.
     // The grounded blocks always contain one official article, confidence,
     // role summary and checklist, so the OpenAI and fallback paths render alike.
+    onProgress(7, "正在產出三階段精簡流程圖卡片");
     const groundedReport = await enrichWithOfficialSubLaws(localReport, facts, assessments);
     const applicable_laws = mergeAiLawInsights(
       groundedReport.applicable_laws,
@@ -656,7 +687,8 @@ async function analyzeWithPipeline(payload) {
           }))
       : [];
 
-    return {
+    onProgress(8, "正在核對法務部來源並依適用性與信心度排序");
+    const completedReport = {
       mode: "pipeline",
       model: OPENAI_MODEL,
       analyzedAt: new Date().toISOString(),
@@ -671,6 +703,8 @@ async function analyzeWithPipeline(payload) {
       nhi_competitors: nhiCompetitors,
       direct_answers,
     };
+    onProgress(9, "分析完成，正在顯示可追溯報告");
+    return completedReport;
   } catch (err) {
     return { ...localReport, mode: "ai_failed_fallback", aiError: err.message };
   }
@@ -1145,8 +1179,10 @@ ${allLawTexts}
 請根據以上法規內容，並緊扣使用者描述的實際情境與需求，針對角色「${roleLabel}」，輸出恰好 3 個作業階段的 JSON 陣列，每個階段包含：
 - stage_title: 階段名稱（例如「【源頭管理】供應來源確認」）
 - law_name: 該階段依據的主要法規名稱
-- control_points: 該階段的查核重點（字串陣列）
+- control_points: 該階段最重要的 2 至 3 個查核重點（字串陣列，每點 30 字以內）
 - owner: 負責單位或角色${stageGuidance}
+
+每個階段只保留必要資訊，階段名稱 24 字以內、主要法規只列 1 至 2 部，不得把整段法規摘要塞入流程圖。
 
 只輸出 JSON 陣列，不要有其他說明。`;
 
@@ -1842,11 +1878,18 @@ function normalizeSummary(value, fallback) {
 function normalizeStages(value, fallback) {
   if (!Array.isArray(value) || value.length === 0) return fallback;
   return value.slice(0, 3).map((stage, index) => ({
-    stage_title: String(stage.stage_title || fallback[index]?.stage_title || `階段 ${index + 1}`),
-    law_name: String(stage.law_name || fallback[index]?.law_name || "待確認法規"),
-    control_points: sanitizeList(stage.control_points, fallback[index]?.control_points || []),
-    owner: String(stage.owner || fallback[index]?.owner || "RA / PM"),
+    stage_title: compactStageText(stage.stage_title || fallback[index]?.stage_title || `階段 ${index + 1}`, 28),
+    law_name: compactStageText(stage.law_name || fallback[index]?.law_name || "待確認法規", 42),
+    control_points: sanitizeList(stage.control_points, fallback[index]?.control_points || [])
+      .slice(0, 3)
+      .map((point) => compactStageText(point, 42)),
+    owner: compactStageText(stage.owner || fallback[index]?.owner || "RA / PM", 22),
   }));
+}
+
+function compactStageText(value, maxLength) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
 // ---------------------------------------------------------------------------

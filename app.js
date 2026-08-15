@@ -341,12 +341,16 @@ const LAW_INDEX = [
 ];
 
 const pipelineSteps = [
-  "正在抽取角色、產品類型、法規類型與法律事實...",
-  "正在混合檢索母法、授權子法與實務規範...",
-  "正在判斷適用性與缺漏事實...",
-  "正在產出法規適用性報告...",
-  "正在產出角色專屬重點與 Checklist...",
-  "正在產出三階段流程圖卡片...",
+  "解析角色、產品與運輸情境",
+  "AI 辨識相關母法",
+  "法務部下載母法全文",
+  "解析授權條文與子法",
+  "下載並逐條比對候選子法",
+  "AI 判斷適用性與缺漏事實",
+  "整理摘要、回答與待辦清單",
+  "產出精簡流程圖卡片",
+  "核對官方來源並排序",
+  "完成可追溯報告",
 ];
 
 const scenarioInput = document.querySelector("#scenario");
@@ -360,6 +364,7 @@ const loadDemoButton = document.querySelector("#loadDemo");
 const progressSection = document.querySelector("#progressSection");
 const progressText = document.querySelector("#progressText");
 const progressBar = document.querySelector("#progressBar");
+const progressMeta = document.querySelector("#progressMeta");
 const results = document.querySelector("#results");
 const modeBadge = document.querySelector("#modeBadge");
 const apiStatus = document.querySelector("#apiStatus");
@@ -385,16 +390,13 @@ analyzeButton.addEventListener("click", async () => {
   results.classList.add("hidden");
   progressSection.classList.remove("hidden");
 
-  for (let index = 0; index < pipelineSteps.length; index += 1) {
-    setProgress(index);
-    await wait(300);
-  }
-
   const payload = collectPayload(scenario);
+  startProgressTracking();
   const report = await analyzeScenarioWithApiFallback(payload);
   renderReport(report);
   renderNhiCompetitors(nhiQueryInput.value.trim(), report);
   progressSection.classList.add("hidden");
+  stopProgressTracking();
   results.classList.remove("hidden");
   analyzeButton.disabled = false;
 });
@@ -408,13 +410,33 @@ async function analyzeScenarioWithApiFallback(payload) {
   }
 
   try {
-    const response = await fetch("/api/v1/analyze", {
+    const response = await fetch("/api/v1/analyze-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     if (!response.ok) throw new Error(`API failed: ${response.status}`);
-    return await response.json();
+    if (!response.body) throw new Error("瀏覽器不支援串流進度回報");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalReport = null;
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const event = JSON.parse(line);
+        if (event.type === "progress") setProgress(event.step, event.message, event.elapsed_ms);
+        if (event.type === "result") finalReport = event.report;
+        if (event.type === "error") throw new Error(event.message || "分析失敗");
+      }
+      if (done) break;
+    }
+    if (!finalReport) throw new Error("後端未回傳完整分析結果");
+    return finalReport;
   } catch (error) {
     return {
       mode: "api_failed",
@@ -744,10 +766,10 @@ function renderLawArticlePair(law, role) {
 
 function renderStage(stage) {
   return `<section class="stage-card">
-    <p class="stage-kicker">${escapeHtml(stage.owner)}</p>
-    <h4>${escapeHtml(stage.stage_title)}</h4>
-    <p class="stage-law">${escapeHtml(stage.law_name)}</p>
-    <ul>${stage.control_points.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul>
+    <p class="stage-kicker">${escapeHtml(compactFlowText(stage.owner, 22))}</p>
+    <h4>${escapeHtml(compactFlowText(stage.stage_title, 28))}</h4>
+    <p class="stage-law">${escapeHtml(compactFlowText(stage.law_name, 42))}</p>
+    <ul>${(stage.control_points || []).slice(0, 3).map((point) => `<li>${escapeHtml(compactFlowText(point, 42))}</li>`).join("")}</ul>
   </section>`;
 }
 
@@ -880,11 +902,40 @@ async function checkApiHealth() {
   }
 }
 
-function setProgress(index) {
-  progressText.textContent = pipelineSteps[index];
-  progressBar.style.width = `${((index + 1) / pipelineSteps.length) * 100}%`;
+let pipelineStartedAt = 0;
+let pipelineTimer = null;
+let currentPipelineIndex = 0;
+
+function startProgressTracking() {
+  pipelineStartedAt = Date.now();
+  currentPipelineIndex = 0;
+  setProgress(0, pipelineSteps[0], 0);
+  clearInterval(pipelineTimer);
+  pipelineTimer = window.setInterval(updateProgressClock, 1000);
+}
+
+function stopProgressTracking() {
+  clearInterval(pipelineTimer);
+  pipelineTimer = null;
+}
+
+function updateProgressClock() {
+  const elapsedSeconds = Math.max(0, Math.round((Date.now() - pipelineStartedAt) / 1000));
+  progressMeta.textContent = `已進行 ${elapsedSeconds} 秒 · 目前步驟 ${currentPipelineIndex + 1}/${pipelineSteps.length}`;
+}
+
+function setProgress(index, message = pipelineSteps[index], elapsedMs = null) {
+  currentPipelineIndex = Math.max(0, Math.min(Number(index) || 0, pipelineSteps.length - 1));
+  progressText.textContent = message || pipelineSteps[currentPipelineIndex];
+  if (Number.isFinite(elapsedMs)) {
+    progressMeta.textContent = `已進行 ${Math.round(elapsedMs / 1000)} 秒 · 目前步驟 ${currentPipelineIndex + 1}/${pipelineSteps.length}`;
+  } else {
+    updateProgressClock();
+  }
+  progressBar.style.width = `${((currentPipelineIndex + 1) / pipelineSteps.length) * 100}%`;
   document.querySelectorAll(".pipeline-list li").forEach((item, itemIndex) => {
-    item.classList.toggle("active", itemIndex <= index);
+    item.classList.toggle("completed", itemIndex < currentPipelineIndex);
+    item.classList.toggle("active", itemIndex === currentPipelineIndex);
   });
 }
 
@@ -977,25 +1028,25 @@ downloadFlowchartButton.addEventListener("click", () => {
 
 function downloadFlowchartPng(stages) {
   const canvas = document.createElement("canvas");
-  canvas.width = 1800;
-  canvas.height = 920;
+  canvas.width = 1600;
+  canvas.height = 700;
   const context = canvas.getContext("2d");
   context.fillStyle = "#eef4f1";
   context.fillRect(0, 0, canvas.width, canvas.height);
 
   context.fillStyle = "#17201c";
-  context.font = '800 48px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-  context.fillText("法規審查與供應鏈流程圖", 80, 90);
+  context.font = '800 42px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
+  context.fillText("法規審查與供應鏈流程圖", 70, 78);
   context.fillStyle = "#68746d";
-  context.font = '24px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-  context.fillText(`產出時間：${new Date().toLocaleString("zh-TW")}`, 80, 132);
+  context.font = '20px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
+  context.fillText(`產出時間：${new Date().toLocaleString("zh-TW")}`, 70, 114);
 
-  const gap = 42;
-  const cardWidth = (canvas.width - 160 - gap * 2) / 3;
-  const cardTop = 190;
-  const cardHeight = 640;
+  const gap = 34;
+  const cardWidth = (canvas.width - 140 - gap * 2) / 3;
+  const cardTop = 155;
+  const cardHeight = 470;
   stages.slice(0, 3).forEach((stage, index) => {
-    const x = 80 + index * (cardWidth + gap);
+    const x = 70 + index * (cardWidth + gap);
     context.fillStyle = "#ffffff";
     context.strokeStyle = "#cfdcd5";
     context.lineWidth = 3;
@@ -1008,26 +1059,26 @@ function downloadFlowchartPng(stages) {
     context.fill();
 
     context.fillStyle = "#2f7d73";
-    context.font = '700 22px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-    context.fillText(`階段 ${index + 1} · ${stage.owner || "負責單位待確認"}`, x + 28, cardTop + 70);
+    context.font = '700 18px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
+    context.fillText(compactFlowText(`階段 ${index + 1} · ${stage.owner || "負責單位待確認"}`, 28), x + 24, cardTop + 55);
 
     context.fillStyle = "#17201c";
-    context.font = '800 31px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-    let y = drawWrappedText(context, stage.stage_title || "未命名階段", x + 28, cardTop + 125, cardWidth - 56, 42);
+    context.font = '800 27px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
+    let y = drawWrappedText(context, compactFlowText(stage.stage_title || "未命名階段", 28), x + 24, cardTop + 105, cardWidth - 48, 36);
 
     context.fillStyle = "#b78103";
-    context.font = '700 22px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-    y = drawWrappedText(context, stage.law_name || "法規待確認", x + 28, y + 22, cardWidth - 56, 32);
+    context.font = '700 18px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
+    y = drawWrappedText(context, compactFlowText(stage.law_name || "法規待確認", 38), x + 24, y + 18, cardWidth - 48, 27);
 
     context.fillStyle = "#17201c";
-    context.font = '24px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-    for (const point of stage.control_points || []) {
+    context.font = '20px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
+    for (const point of (stage.control_points || []).slice(0, 3)) {
       context.fillStyle = "#0f766e";
       context.beginPath();
-      context.arc(x + 37, y + 20, 6, 0, Math.PI * 2);
+      context.arc(x + 31, y + 17, 5, 0, Math.PI * 2);
       context.fill();
       context.fillStyle = "#17201c";
-      y = drawWrappedText(context, point, x + 55, y + 28, cardWidth - 83, 34) + 10;
+      y = drawWrappedText(context, compactFlowText(point, 38), x + 47, y + 23, cardWidth - 70, 28) + 9;
     }
 
     if (index < 2) {
@@ -1048,6 +1099,11 @@ function downloadFlowchartPng(stages) {
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, "image/png");
+}
+
+function compactFlowText(value, maxLength) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
 function drawWrappedText(context, text, x, y, maxWidth, lineHeight) {

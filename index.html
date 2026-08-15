@@ -8,7 +8,7 @@
       name="description"
       content="ReguFlow MVP: role-aware Taiwan pharma regulatory retrieval with grounded laws, checklist, and process cards."
     />
-    <link rel="stylesheet" href="/styles.css?v=20260815v9" />
+    <link rel="stylesheet" href="/styles.css?v=20260815v10" />
   </head>
   <body>
     <main class="app-shell">
@@ -26,12 +26,16 @@
           <div class="pipeline-card">
             <p class="section-label">法規檢索流程</p>
             <ol class="pipeline-list">
-              <li class="active" data-step="1">抽取法律事實</li>
-              <li data-step="2">混合檢索候選法規</li>
-              <li data-step="3">判斷適用性與缺漏事實</li>
-              <li data-step="4">產出可追溯報告</li>
-              <li data-step="5">產出重點與代辦清單</li>
-              <li data-step="6">產出流程圖卡片</li>
+              <li data-step="1">解析角色、產品與運輸情境</li>
+              <li data-step="2">AI 辨識相關母法</li>
+              <li data-step="3">法務部下載母法全文</li>
+              <li data-step="4">解析授權條文與子法</li>
+              <li data-step="5">下載並逐條比對候選子法</li>
+              <li data-step="6">AI 判斷適用性與缺漏事實</li>
+              <li data-step="7">整理摘要、回答與待辦清單</li>
+              <li data-step="8">產出精簡流程圖卡片</li>
+              <li data-step="9">核對官方來源並排序</li>
+              <li data-step="10">完成可追溯報告</li>
             </ol>
           </div>
 
@@ -258,6 +262,7 @@
               <span class="spinner" aria-hidden="true"></span>
               <p id="progressText">正在連線法務部法規資料庫並進行 AI 分析，請稍候...</p>
             </div>
+            <p class="progress-meta" id="progressMeta">準備開始...</p>
             <div class="progress-track"><span id="progressBar"></span></div>
           </section>
 
@@ -338,6 +343,6 @@
       </section>
     </main>
 
-    <script src="/app.js?v=20260815v9"></script>
+    <script src="/app.js?v=20260815v10"></script>
   </body>
 </html>

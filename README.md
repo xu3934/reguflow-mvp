@@ -4,7 +4,7 @@ ReguFlow is an AI-native regulatory retrieval prototype for Taiwan pharma and bi
 
 Live demo:
 
-https://reguflow-mvp.onrender.com/?v=20260815v9
+https://reguflow-mvp.onrender.com/?v=20260815v10
 
 API health check:
 
@@ -26,7 +26,7 @@ ReguFlow is designed to reduce hallucination risk in regulatory search. Instead 
 
 Open the live demo:
 
-https://reguflow-mvp.onrender.com/?v=20260815v9
+https://reguflow-mvp.onrender.com/?v=20260815v10
 
 Then fill in:
 
