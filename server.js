@@ -6,7 +6,7 @@ loadDotEnv();
 
 const PORT = Number(process.env.PORT || 3000);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const APP_VERSION = "20260815v18";
+const APP_VERSION = "20260815v17";
 const OPENAI_MODEL = normalizeOpenAIModelId(process.env.OPENAI_MODEL, "gpt-5.6-luna");
 // Prompt A (pick a mother law from a shortlist) and Prompt B (pull authorizing
 // clauses out of a statute) are classification/extraction, not drafting — a
@@ -18,10 +18,81 @@ const requestedReasoningEffort = String(process.env.OPENAI_REASONING_EFFORT || "
 const OPENAI_REASONING_EFFORT = ["none", "low", "medium", "high", "xhigh", "max"].includes(requestedReasoningEffort)
   ? requestedReasoningEffort
   : "none";
+const AI_HEALTH_CACHE_TTL_MS = 2 * 60 * 1000;
+let aiHealthCache = null;
 
 function normalizeOpenAIModelId(value, fallback) {
   const model = String(value || fallback).trim();
   return /^(gpt-|text-embedding-)/i.test(model) ? model.toLowerCase() : model;
+}
+
+async function checkOpenAIConnection() {
+  if (!OPENAI_API_KEY) {
+    return {
+      configured: false,
+      reachable: false,
+      checkedAt: null,
+      error: "尚未設定 OpenAI API Key",
+    };
+  }
+
+  const now = Date.now();
+  if (aiHealthCache && now - aiHealthCache.cachedAt < AI_HEALTH_CACHE_TTL_MS) {
+    return aiHealthCache.value;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 7000);
+  let value;
+  try {
+    const requiredModels = [...new Set([
+      OPENAI_MODEL,
+      OPENAI_FAST_MODEL,
+      OPENAI_SUMMARY_MODEL,
+      OPENAI_EMBEDDING_MODEL,
+    ])];
+    const modelChecks = await Promise.all(requiredModels.map(async (model) => {
+      try {
+        const response = await fetch(`https://api.openai.com/v1/models/${encodeURIComponent(model)}`, {
+          headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
+          signal: controller.signal,
+        });
+        if (response.ok) return { model, reachable: true, error: null };
+        const body = await response.json().catch(() => ({}));
+        return {
+          model,
+          reachable: false,
+          error: body.error?.message || `OpenAI 回應 HTTP ${response.status}`,
+        };
+      } catch (error) {
+        return {
+          model,
+          reachable: false,
+          error: error.name === "AbortError" ? "連線檢查逾時" : error.message,
+        };
+      }
+    }));
+    const failedCheck = modelChecks.find((check) => !check.reachable);
+    value = {
+      configured: true,
+      reachable: !failedCheck,
+      checkedAt: new Date().toISOString(),
+      error: failedCheck ? `${failedCheck.model}：${failedCheck.error}` : null,
+      modelChecks,
+    };
+  } catch (error) {
+    value = {
+      configured: true,
+      reachable: false,
+      checkedAt: new Date().toISOString(),
+      error: error.name === "AbortError" ? "OpenAI 連線檢查逾時" : error.message,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  aiHealthCache = { cachedAt: now, value };
+  return value;
 }
 
 // Scraped statutes and the sub-laws they authorize change on a legislative
@@ -467,8 +538,14 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === "GET" && url.pathname === "/api/health") {
+      const ai = await checkOpenAIConnection();
       return sendJson(res, 200, {
-        apiConfigured: Boolean(OPENAI_API_KEY),
+        backendReachable: true,
+        apiConfigured: ai.configured,
+        aiReachable: ai.reachable,
+        aiCheckedAt: ai.checkedAt,
+        aiError: ai.error,
+        aiModelChecks: ai.modelChecks || [],
         version: APP_VERSION,
         provider: "openai",
         model: OPENAI_API_KEY ? OPENAI_MODEL : null,
@@ -479,7 +556,7 @@ const server = http.createServer(async (req, res) => {
           answers: OPENAI_MODEL,
           competitors: OPENAI_MODEL,
         } : null,
-        mode: OPENAI_API_KEY ? "pipeline_ready" : "local_fallback",
+        mode: ai.reachable ? "pipeline_ready" : (ai.configured ? "ai_unreachable" : "local_fallback"),
         pipeline: "A→法務部爬取→B→逐條比對→Luna 適用性／問答／競品／流程圖 ∥ Sol 摘要／待辦",
       });
     }

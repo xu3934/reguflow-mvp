@@ -418,6 +418,13 @@ analyzeButton.addEventListener("click", async () => {
   const payload = collectPayload(scenario);
   startProgressTracking();
   const report = await analyzeScenarioWithApiFallback(payload);
+  if (report.mode === "pipeline") {
+    sidebarStatus.textContent = "🟢 後端與 AI 已驗證";
+  } else if (report.mode === "ai_failed_fallback") {
+    sidebarStatus.textContent = "🟠 後端正常／AI 分析失敗";
+  } else if (report.mode === "api_failed") {
+    sidebarStatus.textContent = "🔴 後端未連線";
+  }
   renderReport(report);
   renderNhiCompetitors(nhiQueryInput.value.trim(), report);
   progressSection.classList.add("hidden");
@@ -919,18 +926,22 @@ async function checkApiHealth() {
     const response = await fetch("/api/health");
     if (!response.ok) throw new Error(`Health check failed: ${response.status}`);
     const health = await response.json();
-    if (health.apiConfigured) {
+    if (health.aiReachable) {
       setModeBadge("AI Pipeline ready", "openai");
       const modelText = health.models
         ? `適用性／問答／競品／流程圖：${health.models.applicability}；摘要／待辦：${health.models.summary}`
         : `模型：${health.model}`;
       const versionText = health.version ? `版本：${health.version}。` : "";
-      apiStatus.textContent = `🟢 後端 API Online，OpenAI 已連線。${versionText}${modelText}。管線：${health.pipeline || "A→法務部爬取→混合模型分析"}`;
-      sidebarStatus.textContent = "🟢 後端與 AI 已連線";
+      apiStatus.textContent = `🟢 後端 API 已連線，OpenAI 連線驗證成功。${versionText}${modelText}。管線：${health.pipeline || "A→法務部爬取→混合模型分析"}`;
+      sidebarStatus.textContent = "🟢 後端與 AI 已驗證";
+    } else if (health.apiConfigured) {
+      setModeBadge("AI 連線異常", "ai_failed_fallback");
+      apiStatus.textContent = `🟠 後端 API 已連線，但 OpenAI 驗證失敗；分析時將使用法規擷取備援。${health.aiError ? `原因：${health.aiError}` : ""}`;
+      sidebarStatus.textContent = "🟠 後端正常／AI 未連線";
     } else {
       setModeBadge("本地備援", "local_fallback");
-      apiStatus.textContent = "🟡 後端 API Online，但尚未設定 OpenAI API Key；使用本地靜態備援，不會產生 AI 費用。";
-      sidebarStatus.textContent = "🟡 後端已連線／AI 備援";
+      apiStatus.textContent = "🟡 後端 API 已連線，但尚未設定 OpenAI API Key；使用法規擷取備援，不會產生 AI 費用。";
+      sidebarStatus.textContent = "🟡 後端正常／AI 未設定";
     }
   } catch (error) {
     setModeBadge("後端未連線", "api_failed_fallback");

@@ -4,7 +4,7 @@ Rxplain is an AI-native regulatory retrieval prototype for Taiwan pharma and bio
 
 Live demo:
 
-https://reguflow-mvp.onrender.com/?v=20260815v17p6
+https://reguflow-mvp.onrender.com/?v=20260815v17p7
 
 API health check:
 
@@ -26,7 +26,7 @@ Rxplain is designed to reduce hallucination risk in regulatory search. Instead o
 
 Open the live demo:
 
-https://reguflow-mvp.onrender.com/?v=20260815v17p6
+https://reguflow-mvp.onrender.com/?v=20260815v17p7
 
 Then fill in:
 
@@ -66,7 +66,10 @@ Example successful response:
 
 ```json
 {
+  "backendReachable": true,
   "apiConfigured": true,
+  "aiReachable": true,
+  "aiCheckedAt": "2026-08-15T00:00:00.000Z",
   "model": "gpt-5.6-luna",
   "models": {
     "applicability": "gpt-5.6-luna",
@@ -81,7 +84,8 @@ Example successful response:
 
 Modes:
 
-- `pipeline_ready`: the server has an OpenAI API key and will call OpenAI.
+- `pipeline_ready`: the backend successfully verified every configured OpenAI model.
+- `ai_unreachable`: an API key exists, but at least one configured model failed the live connection check.
 - `local_fallback`: no API key is configured; the app uses deterministic local logic.
 - `ai_failed_fallback`: an API key exists, but the AI call failed and the app returned a safe local fallback.
 
@@ -151,7 +155,7 @@ reguflow-mvp/
 GET /api/health
 ```
 
-Returns whether OpenAI API mode is configured.
+Returns separate backend, API-key, and live OpenAI model-connection states. The OpenAI check is cached for two minutes.
 
 ### Analyze
 
