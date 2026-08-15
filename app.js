@@ -405,7 +405,7 @@ scenarioInput.value = GOLDEN_SCENARIO;
 
 async function analyzeScenarioWithApiFallback(payload) {
   if (location.protocol === "file:") {
-    return analyzeScenario(payload, "local_fallback");
+    throw new Error("請透過本機伺服器開啟 APP，法規內容必須由後端即時連接法務部取得。");
   }
 
   try {
@@ -417,9 +417,16 @@ async function analyzeScenarioWithApiFallback(payload) {
     if (!response.ok) throw new Error(`API failed: ${response.status}`);
     return await response.json();
   } catch (error) {
-    const report = analyzeScenario(payload, "api_failed_fallback");
-    report.aiError = error.message;
-    return report;
+    return {
+      mode: "api_failed",
+      model: null,
+      confidence: 0,
+      applicable_laws: [],
+      process_stages: [],
+      traceability: [],
+      direct_answers: [],
+      crawl_error: `無法連接後端或法務部：${error.message}`,
+    };
   }
 }
 
@@ -639,36 +646,101 @@ function calculateOverallConfidence(assessments) {
 }
 
 function renderReport(report) {
+  lastRenderedReport = report;
   const modeLabel = getModeLabel(report.mode);
   setModeBadge(modeLabel, report.mode);
   renderDirectAnswers(report.direct_answers);
-  document.querySelector("#confidenceScore").textContent = `${report.confidence}% grounded`;
+  document.querySelector("#confidenceScore").textContent = report.applicable_laws.length ? "依適用性與信心排序" : "未取得資料";
 
-  document.querySelector("#applicableLaws").innerHTML = report.applicable_laws
-    .map(
-      (law) => `<section class="law-report-item">
-        <div class="law-title-row">
-          <h4>${escapeHtml(law.law_name)}</h4>
-          <span class="law-type">${escapeHtml(law.pcode)}</span>
-        </div>
-        <a class="source-link" href="${law.source_url}" target="_blank" rel="noreferrer">官方來源 ${escapeHtml(law.pcode)}</a>
-        <p><strong>${escapeHtml(law.article)}</strong> ${escapeHtml(law.article_text)}</p>
-      </section>`
-    )
-    .join("");
-
-  document.querySelector("#summaryChecklist").innerHTML = `
-    <p><strong>目前分析來源: ${escapeHtml(modeLabel)}</strong>${report.model ? `，模型: ${escapeHtml(report.model)}` : ""}${report.aiError ? `，備援原因: ${escapeHtml(report.aiError)}` : ""}</p>
-    <h4>${escapeHtml(report.summary_and_checklist.role)} 白話重點</h4>
-    <ul>${report.summary_and_checklist.summary_points.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
-    <h4>代辦清單 Checklist</h4>
-    <ul class="checklist">${report.summary_and_checklist.checklist.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
-    <h4>缺漏事實</h4>
-    <ul>${report.summary_and_checklist.missing_facts.map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>目前沒有明顯缺漏，但仍需 RA / Legal 複核。</li>"}</ul>
-  `;
+  const groupedLaws = groupLawsByStatute(report.applicable_laws);
+  document.querySelector("#applicableLaws").innerHTML = groupedLaws.length
+    ? groupedLaws.map((group, index) => renderLawGroup(group, index, report.facts?.role)).join("")
+    : `<div class="crawl-error">${escapeHtml(report.crawl_error || "未能從法務部取得符合需求的條文，請調整描述後重試。")}</div>`;
 
   document.querySelector("#processStages").innerHTML = report.process_stages.map(renderStage).join("");
-  document.querySelector("#traceRows").innerHTML = report.traceability.map(renderTraceRow).join("");
+}
+
+function groupLawsByStatute(laws) {
+  const groups = new Map();
+  for (const law of laws || []) {
+    if (!groups.has(law.pcode)) groups.set(law.pcode, []);
+    groups.get(law.pcode).push(law);
+  }
+  return [...groups.values()]
+    .map((items) => ({
+      items: items.sort((a, b) => articleNumberForDisplay(a.article) - articleNumberForDisplay(b.article)),
+      top: items.reduce((best, item) => (compareApplicabilityAndConfidence(item, best) < 0 ? item : best), items[0]),
+    }))
+    .sort((a, b) => compareApplicabilityAndConfidence(a.top, b.top));
+}
+
+function compareApplicabilityAndConfidence(a, b) {
+  const priority = { likely_applicable: 3, potentially_applicable: 2, needs_more_information: 1 };
+  const applicabilityDifference = (priority[b?.applicability] || 0) - (priority[a?.applicability] || 0);
+  if (applicabilityDifference !== 0) return applicabilityDifference;
+  const confidenceDifference = Number(b?.confidence || 0) - Number(a?.confidence || 0);
+  if (confidenceDifference !== 0) return confidenceDifference;
+  return Number(b?.rank_score || 0) - Number(a?.rank_score || 0);
+}
+
+function articleNumberForDisplay(article) {
+  const match = String(article || "").match(/第\s*(\d+)/);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
+function renderLawGroup(group, index, role) {
+  const law = group.top;
+  return `<details class="law-group" ${index === 0 ? "open" : ""}>
+    <summary class="law-group-summary">
+      <div class="law-group-heading">
+        <span class="rank-number">#${index + 1}</span>
+        <div>
+          <h4>${escapeHtml(law.law_name)}</h4>
+          <p>${escapeHtml(law.level || "法規")} · ${escapeHtml(law.pcode)} · 共 ${group.items.length} 條相關條文</p>
+        </div>
+      </div>
+      <div class="law-group-metrics">
+        <span class="applicability-pill ${escapeHtml(law.applicability)}">${translateApplicability(law.applicability)}</span>
+        <span class="confidence-pill">最高信心度 ${Number(law.confidence || 0)}%</span>
+      </div>
+    </summary>
+    ${law.parent_law_name ? `<div class="law-group-parent">母法：${escapeHtml(law.parent_law_name)}${law.parent_pcode ? `（${escapeHtml(law.parent_pcode)}）` : ""}${law.authorization_article ? `，授權條號：${escapeHtml(law.authorization_article)}` : ""}</div>` : ""}
+    <div class="law-group-content">
+      ${group.items.map((item) => renderLawArticlePair(item, role)).join("")}
+    </div>
+  </details>`;
+}
+
+function renderLawArticlePair(law, role) {
+  const flno = articleNumberForDisplay(law.article);
+  const articleUrl = Number.isFinite(flno) && flno !== Number.MAX_SAFE_INTEGER
+    ? `https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=${encodeURIComponent(law.pcode)}&flno=${flno}`
+    : law.source_url;
+  return `<section class="law-article-section">
+      <div class="article-section-title">
+        <h5>${escapeHtml(law.article)}</h5>
+        <div class="fit-metrics">
+          <span class="applicability-pill ${escapeHtml(law.applicability)}">${translateApplicability(law.applicability)}</span>
+          <span class="confidence-pill">信心度 ${Number(law.confidence || 0)}%</span>
+        </div>
+      </div>
+      <section class="paired-law-row">
+        <article class="law-report-item law-source-block">
+          ${law.relation_reason ? `<p class="relation-reason">${escapeHtml(law.relation_reason)}</p>` : ""}
+          <a class="source-link" href="${articleUrl}" target="_blank" rel="noreferrer">法務部 ${escapeHtml(law.article)} 官方來源</a>
+          <p class="article-original"><strong>${escapeHtml(law.article)}</strong> ${escapeHtml(law.article_text)}</p>
+        </article>
+        <article class="law-report-item law-brief-block">
+          <p class="section-label">對應重點整理</p>
+          <p>${escapeHtml(law.role_summary || "本條尚無可用摘要。")}</p>
+          <p class="section-label checklist-label">本條待辦清單</p>
+          <div class="checklist checkbox-list">${(law.checklist || ["請由法規或法務人員複核本條要求。"]).map((item, itemIndex) => {
+            const key = `${law.pcode}-${law.article}-${itemIndex}`;
+            return `<label><input type="checkbox" data-check-key="${escapeHtml(key)}" /> <span>${escapeHtml(item)}</span></label>`;
+          }).join("")}</div>
+        </article>
+      </section>
+    </section>`;
 }
 
 function renderStage(stage) {
@@ -840,10 +912,164 @@ function getModeLabel(mode) {
     pipeline: "AI Pipeline (法務部即時串接)",
     ai_pipeline: "AI Pipeline (法務部即時串接)",
     openai: "OpenAI API",
-    local_fallback: "Local fallback",
-    api_failed_fallback: "API failed - local fallback",
-    ai_failed_fallback: "AI failed - local fallback",
-  }[mode] || "Local fallback";
+    local_fallback: "法務部即時擷取（規則式需求比對）",
+    api_failed: "法務部連線失敗",
+    api_failed_fallback: "API failed",
+    ai_failed_fallback: "AI 失敗－使用法務部擷取結果",
+  }[mode] || "法務部即時擷取";
+}
+
+const workspace = document.querySelector(".workspace");
+const sidebarToggle = document.querySelector("#sidebarToggle");
+const saveReportButton = document.querySelector("#saveReport");
+const loadSavedReportButton = document.querySelector("#loadSavedReport");
+const exportPdfButton = document.querySelector("#exportPdf");
+const downloadFlowchartButton = document.querySelector("#downloadFlowchart");
+const saveStatus = document.querySelector("#saveStatus");
+const SAVED_REPORT_KEY = "reguflow-saved-report-v1";
+let lastRenderedReport = null;
+
+sidebarToggle.addEventListener("click", () => {
+  const collapsed = workspace.classList.toggle("sidebar-collapsed");
+  sidebarToggle.textContent = collapsed ? "›" : "‹";
+  sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
+  sidebarToggle.setAttribute("aria-label", collapsed ? "展開左側欄" : "收合左側欄");
+});
+
+saveReportButton.addEventListener("click", () => {
+  if (!lastRenderedReport) return;
+  const checked = [...document.querySelectorAll("[data-check-key]:checked")].map((item) => item.dataset.checkKey);
+  const savedAt = new Date().toISOString();
+  localStorage.setItem(SAVED_REPORT_KEY, JSON.stringify({ report: lastRenderedReport, checked, savedAt }));
+  saveStatus.textContent = `已儲存於本機：${new Date(savedAt).toLocaleString("zh-TW")}`;
+});
+
+loadSavedReportButton.addEventListener("click", () => {
+  const raw = localStorage.getItem(SAVED_REPORT_KEY);
+  if (!raw) {
+    saveStatus.textContent = "尚無已儲存的結果";
+    return;
+  }
+  try {
+    const saved = JSON.parse(raw);
+    renderReport(saved.report);
+    results.classList.remove("hidden");
+    for (const key of saved.checked || []) {
+      const checkbox = document.querySelector(`[data-check-key="${CSS.escape(key)}"]`);
+      if (checkbox) checkbox.checked = true;
+    }
+    saveStatus.textContent = `已載入：${new Date(saved.savedAt).toLocaleString("zh-TW")}`;
+  } catch {
+    saveStatus.textContent = "已儲存的結果格式無法讀取";
+  }
+});
+
+exportPdfButton.addEventListener("click", () => {
+  if (!lastRenderedReport) return;
+  document.querySelectorAll(".law-group").forEach((group) => { group.open = true; });
+  window.print();
+});
+
+downloadFlowchartButton.addEventListener("click", () => {
+  const stages = lastRenderedReport?.process_stages || [];
+  if (!stages.length) return;
+  downloadFlowchartPng(stages);
+});
+
+function downloadFlowchartPng(stages) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1800;
+  canvas.height = 920;
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#eef4f1";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  context.fillStyle = "#17201c";
+  context.font = '800 48px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
+  context.fillText("法規審查與供應鏈流程圖", 80, 90);
+  context.fillStyle = "#68746d";
+  context.font = '24px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
+  context.fillText(`產出時間：${new Date().toLocaleString("zh-TW")}`, 80, 132);
+
+  const gap = 42;
+  const cardWidth = (canvas.width - 160 - gap * 2) / 3;
+  const cardTop = 190;
+  const cardHeight = 640;
+  stages.slice(0, 3).forEach((stage, index) => {
+    const x = 80 + index * (cardWidth + gap);
+    context.fillStyle = "#ffffff";
+    context.strokeStyle = "#cfdcd5";
+    context.lineWidth = 3;
+    roundRect(context, x, cardTop, cardWidth, cardHeight, 18);
+    context.fill();
+    context.stroke();
+
+    context.fillStyle = "#0f766e";
+    roundRect(context, x, cardTop, cardWidth, 16, 8);
+    context.fill();
+
+    context.fillStyle = "#2f7d73";
+    context.font = '700 22px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
+    context.fillText(`階段 ${index + 1} · ${stage.owner || "負責單位待確認"}`, x + 28, cardTop + 70);
+
+    context.fillStyle = "#17201c";
+    context.font = '800 31px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
+    let y = drawWrappedText(context, stage.stage_title || "未命名階段", x + 28, cardTop + 125, cardWidth - 56, 42);
+
+    context.fillStyle = "#b78103";
+    context.font = '700 22px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
+    y = drawWrappedText(context, stage.law_name || "法規待確認", x + 28, y + 22, cardWidth - 56, 32);
+
+    context.fillStyle = "#17201c";
+    context.font = '24px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
+    for (const point of stage.control_points || []) {
+      context.fillStyle = "#0f766e";
+      context.beginPath();
+      context.arc(x + 37, y + 20, 6, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = "#17201c";
+      y = drawWrappedText(context, point, x + 55, y + 28, cardWidth - 83, 34) + 10;
+    }
+
+    if (index < 2) {
+      context.fillStyle = "#0f766e";
+      context.font = '800 46px sans-serif';
+      context.fillText("→", x + cardWidth + 7, cardTop + cardHeight / 2);
+    }
+  });
+
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `ReguFlow-流程圖-${new Date().toISOString().slice(0, 10)}.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, "image/png");
+}
+
+function drawWrappedText(context, text, x, y, maxWidth, lineHeight) {
+  let line = "";
+  for (const character of String(text)) {
+    const candidate = line + character;
+    if (context.measureText(candidate).width > maxWidth && line) {
+      context.fillText(line, x, y);
+      line = character;
+      y += lineHeight;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line) context.fillText(line, x, y);
+  return y;
+}
+
+function roundRect(context, x, y, width, height, radius) {
+  context.beginPath();
+  context.roundRect(x, y, width, height, radius);
 }
 
 // ---------------------------------------------------------------------------

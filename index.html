@@ -14,6 +14,7 @@
     <main class="app-shell">
       <section class="workspace">
         <aside class="sidebar" aria-label="ReguFlow pipeline">
+          <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-expanded="true" aria-label="收合左側欄">‹</button>
           <div class="brand-block">
             <div class="brand-mark">R</div>
             <div>
@@ -23,7 +24,7 @@
           </div>
 
           <div class="pipeline-card">
-            <p class="section-label">Retrieval Pipeline</p>
+            <p class="section-label">法規檢索流程</p>
             <ol class="pipeline-list">
               <li class="active" data-step="1">抽取法律事實</li>
               <li data-step="2">混合檢索候選法規</li>
@@ -50,10 +51,10 @@
         <section class="main-panel">
           <header class="topbar">
             <div>
-              <p class="eyebrow">Regulatory Intelligence Copilot</p>
+              <p class="eyebrow">法規智慧助理</p>
               <h2>輸入情境，一鍵產出完整法規路徑與合規流程圖</h2>
             </div>
-            <button class="ghost-button" id="loadDemo" type="button">載入 Demo Case</button>
+            <button class="ghost-button" id="loadDemo" type="button">載入示範案例</button>
           </header>
 
           <div class="mode-tabs" role="tablist">
@@ -65,7 +66,7 @@
             <section class="input-section">
               <div class="section-header">
                 <div>
-                  <p class="section-label">Compliance Screening</p>
+                  <p class="section-label">合規檢查</p>
                   <h3>廣告與衛教文案合規檢查</h3>
                 </div>
                 <span class="status-pill api-off">送審前自我檢查</span>
@@ -261,73 +262,54 @@
           </section>
 
           <section class="results-grid hidden" id="results">
+            <article class="result-actions wide-card">
+              <div>
+                <strong>報告工具</strong>
+                <span id="saveStatus">結果尚未儲存</span>
+              </div>
+              <div class="result-action-buttons">
+                <button class="ghost-button small" id="saveReport" type="button">儲存結果</button>
+                <button class="ghost-button small" id="loadSavedReport" type="button">載入上次結果</button>
+                <button class="primary-button small" id="exportPdf" type="button">匯出 PDF</button>
+              </div>
+            </article>
+
             <article class="report-card wide-card hidden" id="answersCard">
               <div class="section-header">
                 <div>
-                  <p class="section-label">Direct Answers</p>
+                  <p class="section-label">直接回答</p>
                   <h3>針對您的提問</h3>
                 </div>
               </div>
               <div id="directAnswers" class="answers-list"></div>
             </article>
 
-            <article class="report-card primary-report">
+            <article class="report-card wide-card primary-report">
               <div class="section-header">
                 <div>
-                  <p class="section-label">Text & Grounding</p>
-                  <h3>法規適用性報告</h3>
+                  <p class="section-label">法規原文與依據</p>
+                  <h3>法條、適用性與角色專屬行動</h3>
                 </div>
                 <span class="score-badge" id="confidenceScore">--</span>
               </div>
               <div id="applicableLaws" class="law-report-list"></div>
             </article>
 
-            <article class="report-card primary-report">
-              <div class="section-header">
-                <div>
-                  <p class="section-label">Role Brief</p>
-                  <h3>角色專屬重點與 Checklist</h3>
-                </div>
-              </div>
-              <div id="summaryChecklist" class="summary-copy"></div>
-            </article>
-
             <article class="report-card wide-card">
               <div class="section-header">
                 <div>
-                  <p class="section-label">SaaS UI Cards</p>
+                  <p class="section-label">流程卡片</p>
                   <h3>法規審查與供應鏈流程圖</h3>
                 </div>
+                <button class="ghost-button small" id="downloadFlowchart" type="button">下載流程圖 PNG</button>
               </div>
               <div id="processStages" class="stage-grid"></div>
-            </article>
-
-            <article class="report-card wide-card">
-              <div class="section-header">
-                <div>
-                  <p class="section-label">Traceability</p>
-                  <h3>官方來源對照表</h3>
-                </div>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>結論</th>
-                      <th>官方來源</th>
-                      <th>適用性</th>
-                      <th>信心</th>
-                    </tr>
-                  </thead>
-                  <tbody id="traceRows"></tbody>
-                </table>
-              </div>
             </article>
 
             <article class="report-card wide-card hidden" id="nhiCard">
               <div class="section-header">
                 <div>
-                  <p class="section-label">NHI Open Data</p>
+                  <p class="section-label">健保開放資料</p>
                   <h3>競品收載狀況（健保署開放資料）</h3>
                 </div>
                 <span class="score-badge" id="nhiMeta">--</span>

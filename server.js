@@ -19,6 +19,7 @@ const OPENAI_FAST_MODEL = process.env.OPENAI_FAST_MODEL || "gpt-4.1-nano";
 const LAW_TEXT_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 const lawTextCache = new Map();
 const subLawCache = new Map();
+const authorizedSubLawCache = new Map();
 const pcodeByNameCache = new Map();
 
 function cacheGet(cache, key) {
@@ -520,7 +521,9 @@ async function analyzeWithPipeline(payload) {
   const assessments = assessApplicability(facts, candidates).slice(0, 6);
   const localReport = buildLocalReport(facts, candidates, assessments);
 
-  if (!OPENAI_API_KEY) return localReport;
+  if (!OPENAI_API_KEY) {
+    return await enrichWithOfficialSubLaws(localReport, facts, assessments);
+  }
 
   try {
     // Step 3a: Prompt A — identify mother law PCode + competitor query
@@ -543,54 +546,40 @@ async function analyzeWithPipeline(payload) {
     // Step 3b: Fetch mother law text
     const motherLawText = await fetchLawText(pcode);
 
-    // Step 3c: Prompt B — extract sub-law authorization phrases
+    // Prefer the Ministry of Justice's authoritative child-law metadata.
+    // Prompt B is only a fallback: a generated search tag is not necessarily
+    // an exact law name and therefore cannot be the primary lookup key.
+    const authorizedSubLaws = await fetchAuthorizedSubLaws(pcode);
     let subLawRefs = [];
-    try {
-      subLawRefs = await runPromptB(motherLawText, motherLawName || pcode, pcode);
-    } catch {
-      subLawRefs = [];
+    if (!authorizedSubLaws.length) {
+      try {
+        subLawRefs = await runPromptB(motherLawText, motherLawName || pcode, pcode);
+      } catch {
+        subLawRefs = [];
+      }
     }
 
-    // Step 3d: For each sub-law tag (max 3), find PCode and fetch text — run in parallel
-    const subLawTags = subLawRefs.slice(0, 3).map((ref) => ref.search_tag).filter(Boolean);
+    // Resolve and fetch relevant child statutes in parallel.
+    const selectedAuthorized = rankAuthorizedSubLaws(authorizedSubLaws, facts).slice(0, 6);
+    const fallbackTags = subLawRefs.slice(0, 4).map((ref) => ref.search_tag).filter(Boolean);
     const subLawResults = await Promise.allSettled(
-      subLawTags.map(async (tag) => {
-        const subPcode = await findPcodeByName(tag);
+      (selectedAuthorized.length ? selectedAuthorized : fallbackTags.map((tag) => ({ title: tag }))).map(async (ref) => {
+        const subPcode = ref.pcode || await findPcodeByName(ref.title);
         if (!subPcode) return null;
         const text = await fetchLawText(subPcode);
-        return { tag, pcode: subPcode, text };
+        return { tag: ref.title, title: ref.title, article: ref.article || "授權子法", pcode: subPcode, text };
       })
     );
     const subLawTexts = subLawResults
       .filter((r) => r.status === "fulfilled" && r.value && r.value.text)
       .map((r) => r.value);
 
-    // Trace what the authorization-chain step actually produced. Without this
-    // it is impossible to tell a sub-law that was never identified from one
-    // that was identified but failed to resolve to a pcode.
-    const subLawTrace = {
-      motherLaw: { pcode, name: motherLawName, chars: motherLawText.length },
-      promptBRefs: subLawRefs.map((ref) => ({
-        article: ref.article || null,
-        search_tag: ref.search_tag || null,
-      })),
-      resolution: subLawResults.map((r, i) => ({
-        tag: subLawTags[i],
-        pcode: r.status === "fulfilled" && r.value ? r.value.pcode : null,
-        chars: r.status === "fulfilled" && r.value ? r.value.text.length : 0,
-        status: r.status === "rejected" ? "error" : r.value ? "fetched" : "pcode_not_found",
-      })),
-    };
-
     // Step 3e: Build combined law text string (cap at 20000 chars)
     let allLawTexts = `【母法: ${motherLawName || pcode}】\n${motherLawText}`;
     for (const sub of subLawTexts) {
       allLawTexts += `\n\n【子法: ${sub.tag} (${sub.pcode})】\n${sub.text}`;
     }
-    const preCapLength = allLawTexts.length;
     if (allLawTexts.length > 20000) allLawTexts = allLawTexts.slice(0, 20000);
-    subLawTrace.combinedChars = preCapLength;
-    subLawTrace.truncated = preCapLength > 20000;
 
     const role = facts.role;
     const scenario = facts.rawScenario;
@@ -670,7 +659,6 @@ async function analyzeWithPipeline(payload) {
       traceability: buildTraceability(assessments),
       nhi_competitors: nhiCompetitors,
       direct_answers,
-      sub_law_trace: subLawTrace,
     };
   } catch (err) {
     return { ...localReport, mode: "ai_failed_fallback", aiError: err.message };
@@ -1184,6 +1172,309 @@ function parseLawHtml(html) {
   return result.slice(0, 10000);
 }
 
+function decodeHtml(text) {
+  return String(text || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function fetchAuthorizedSubLaws(pcode) {
+  const cached = cacheGet(authorizedSubLawCache, pcode);
+  if (cached !== undefined) return cached;
+
+  try {
+    const html = await httpGet(`https://law.moj.gov.tw/LawClass/LawSlaveAll.aspx?pcode=${encodeURIComponent(pcode)}`);
+    const rows = html.match(/<tr\b[\s\S]*?<\/tr>/gi) || [];
+    const results = [];
+    for (const row of rows) {
+      const child = row.match(/LawAll\.aspx\?pcode=([A-Z][0-9A-Z]{7})[^>]*>([\s\S]*?)<\/a>/i);
+      if (!child || child[1].toUpperCase() === pcode.toUpperCase()) continue;
+      const articleMatch = row.match(/LawSingle\.aspx\?[^"']*flno=(\d+)[^>]*>([\s\S]*?)<\/a>/i);
+      const rawTitle = decodeHtml(child[2]);
+      const title = rawTitle.replace(/（民國\s*\d+\s*年[\s\S]*?）\s*$/, "").trim();
+      if (!title || results.some((item) => item.pcode === child[1].toUpperCase())) continue;
+      results.push({
+        pcode: child[1].toUpperCase(),
+        title,
+        article: articleMatch ? decodeHtml(articleMatch[2]) : "授權子法",
+        parentPcode: pcode,
+        source_url: `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${child[1].toUpperCase()}`,
+      });
+    }
+    if (results.length) cacheSet(authorizedSubLawCache, pcode, results);
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+function rankAuthorizedSubLaws(items, facts) {
+  const scenario = `${facts.rawScenario || ""} ${(facts.lawTypes || []).join(" ")} ${(facts.activities || []).join(" ")}`;
+  const keywordGroups = [
+    ["查驗", "審查", "登記", "許可"], ["運輸", "運銷", "物流", "流向", "保存"],
+    ["製造", "GMP", "品質"], ["安全", "監視", "不良"], ["來源", "提供者", "細胞", "組織"],
+    ["廣告", "招募"], ["費", "收費"],
+  ];
+  return items
+    .map((item, index) => {
+      let score = -index / 100;
+      for (const group of keywordGroups) {
+        if (group.some((word) => scenario.includes(word)) && group.some((word) => item.title.includes(word))) score += 10;
+      }
+      return { ...item, relevanceScore: score };
+    })
+    .sort((a, b) => b.relevanceScore - a.relevanceScore);
+}
+
+function extractLawArticles(text) {
+  const cleaned = String(text || "").replace(/\s+/g, " ").trim();
+  const heading = /第\s*\d+(?:\s*之\s*\d+)?\s*條/g;
+  const matches = [...cleaned.matchAll(heading)];
+  if (!matches.length) return cleaned ? [{ article: "法規內容", text: cleaned.slice(0, 1200) }] : [];
+  return matches.map((match, index) => ({
+    article: match[0].replace(/\s+/g, ""),
+    text: cleaned.slice(match.index + match[0].length, matches[index + 1]?.index ?? cleaned.length).trim(),
+  })).filter((item) => item.text.length >= 8);
+}
+
+function buildRequirementTerms(facts) {
+  const context = `${facts.rawScenario || ""} ${(facts.lawTypes || []).join(" ")} ${(facts.activities || []).join(" ")} ${facts.role || ""}`;
+  const groups = [
+    { triggers: ["查驗", "登記", "審查", "上市"], terms: ["查驗登記", "申請", "檢附", "文件", "資料", "審查", "許可", "展延", "變更", "移轉", "標籤", "仿單"] },
+    { triggers: ["物流", "運輸", "GDP", "運銷"], terms: ["運銷", "運輸", "輸入", "儲存", "倉儲", "配送", "溫度", "流向", "保存", "紀錄", "追溯", "召回", "品質"] },
+    { triggers: ["製造", "生產", "GMP"], terms: ["製造", "優良製造", "品質", "許可", "證明文件", "檢驗", "批次", "放行"] },
+    { triggers: ["細胞", "再生", "組織"], terms: ["再生醫療", "細胞", "組織", "提供者", "來源", "合適性", "安全監視"] },
+    { triggers: ["廣告", "衛教", "招募"], terms: ["廣告", "招募", "刊播", "核准", "宣傳"] },
+    { triggers: ["健保", "給付"], terms: ["給付", "支付", "收載", "核價", "申請"] },
+  ];
+  return Array.from(new Set(groups.filter((group) => group.triggers.some((word) => context.includes(word))).flatMap((group) => group.terms)));
+}
+
+function parseChineseNumber(value) {
+  if (/^\d+$/.test(value)) return Number(value);
+  const digits = { 零: 0, 〇: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  if (value === "十") return 10;
+  if (value.includes("十")) {
+    const [tens, ones] = value.split("十");
+    return (tens ? digits[tens] : 1) * 10 + (ones ? digits[ones] : 0);
+  }
+  return digits[value] ?? null;
+}
+
+function articleNumber(article) {
+  const match = String(article.article || "").match(/第(\d+)(?:之\d+)?條/);
+  return match ? Number(match[1]) : null;
+}
+
+function referencedArticleNumbers(article) {
+  const current = articleNumber(article);
+  if (!current) return [];
+  const refs = new Set();
+  for (const match of article.text.matchAll(/第\s*([一二三四五六七八九十百零〇\d]+)\s*條/g)) {
+    const value = parseChineseNumber(match[1]);
+    if (value) refs.add(value);
+  }
+  if (/前條/.test(article.text)) refs.add(current - 1);
+  const previousMatch = article.text.match(/前([二三四五六七八九十])條/);
+  if (previousMatch) {
+    const count = parseChineseNumber(previousMatch[1]) || 0;
+    for (let offset = 1; offset <= count; offset += 1) refs.add(current - offset);
+  }
+  refs.delete(current);
+  return [...refs].filter((value) => value > 0);
+}
+
+function expandArticleRelations(seedArticles, allArticles, maxArticles = 6) {
+  const byNumber = new Map(allArticles.map((article) => [articleNumber(article), article]).filter(([number]) => number));
+  const graph = new Map();
+  const connect = (from, to) => {
+    if (!byNumber.has(from) || !byNumber.has(to)) return;
+    if (!graph.has(from)) graph.set(from, new Set());
+    if (!graph.has(to)) graph.set(to, new Set());
+    graph.get(from).add(to);
+    graph.get(to).add(from);
+  };
+  for (const article of allArticles) {
+    const from = articleNumber(article);
+    for (const to of referencedArticleNumbers(article)) connect(from, to);
+  }
+
+  const chosen = new Map();
+  const queue = [];
+  for (const article of seedArticles) {
+    const number = articleNumber(article);
+    if (!number) continue;
+    chosen.set(number, article);
+    queue.push(number);
+  }
+  while (queue.length && chosen.size < maxArticles) {
+    const source = queue.shift();
+    for (const target of graph.get(source) || []) {
+      if (chosen.has(target)) continue;
+      const article = byNumber.get(target);
+      chosen.set(target, {
+        ...article,
+        score: Math.max(article.score || 0, 6),
+        relationReason: `條文關聯展開：與第${source}條相互引用或補充`,
+      });
+      queue.push(target);
+      if (chosen.size >= maxArticles) break;
+    }
+  }
+  return [...chosen.values()].sort((a, b) => a.index - b.index);
+}
+
+function selectRelevantLawArticles(text, facts, maxArticles = 2) {
+  const terms = buildRequirementTerms(facts);
+  const ranked = extractLawArticles(text).map((item, index) => {
+    let score = 0;
+    for (const term of terms) {
+      if (item.text.includes(term)) score += term.length >= 4 ? 3 : 2;
+    }
+    if (/本(辦法|準則).*依.*規定訂定之[。]?$/.test(item.text) && item.text.length < 100) score -= 8;
+    if (/處.*罰鍰|有下列.*情形.*處/.test(item.text)) score -= 25;
+    if (item.text.length >= 40 && item.text.length <= 700) score += 1;
+    return { ...item, score, index };
+  }).sort((a, b) => b.score - a.score || a.index - b.index);
+  const seeds = ranked.slice(0, maxArticles).sort((a, b) => a.index - b.index);
+  const selected = expandArticleRelations(seeds, ranked, Math.max(6, maxArticles));
+  return {
+    article: selected.map((item) => item.article).join("、") || "法規內容",
+    articleText: selected.map((item) => `${item.article} ${item.text}`).join("\n").slice(0, 1200),
+    matchScore: selected.reduce((sum, item) => sum + Math.max(0, item.score), 0),
+    articles: selected,
+  };
+}
+
+function buildArticleChecklist(articleText, facts) {
+  const items = [];
+  const add = (item) => { if (!items.includes(item)) items.push(item); };
+  if (/申請|查驗登記|核准/.test(articleText)) add("確認申請時點、負責單位及核准狀態");
+  if (/檢附|文件|資料/.test(articleText)) add("逐項準備並複核本條要求的文件與資料");
+  if (/保存|紀錄|流向|追蹤/.test(articleText)) add("建立可稽核的保存、流向與追溯紀錄");
+  if (/製造|GMP|品質/.test(articleText)) add("確認製造與品質系統符合本條要求");
+  if (/輸入|運輸|運銷|配送|倉儲/.test(articleText)) add("確認輸入、倉儲、運輸及委外責任分工");
+  if (/標籤|仿單|包裝/.test(articleText)) add("核對標籤、仿單與包裝內容及核准版本");
+  if (/期限|期間|屆滿|日內|月內|年/.test(articleText)) add("將法定期限納入專案時程並設定提醒");
+  if (!items.length) add(`由${facts.role || "負責單位"}確認本條義務、證據與負責人`);
+  return items.slice(0, 4);
+}
+
+function buildRoleSummary(articleText, facts) {
+  const compact = String(articleText || "").replace(/\s+/g, " ").trim();
+  const excerpt = compact.length > 260 ? `${compact.slice(0, 260)}…` : compact;
+  return `對${facts.role || "使用者"}而言，本條直接要求：${excerpt}`;
+}
+
+function makeArticleBlock({ lawName, pcode, sourceUrl, level, parentLawName = "", parentPcode = "", authorizationArticle = "", article, motherScore, titleScore, facts }) {
+  const articleScore = Math.max(0, article.score || 0);
+  const rawScore = Math.max(1, Math.round(motherScore * 0.55 + titleScore + articleScore * 2));
+  const confidence = Math.max(45, Math.min(95, Math.round(45 + articleScore * 0.7 + Math.max(0, titleScore) * 0.8)));
+  const applicability = confidence >= 78 ? "likely_applicable" : confidence >= 58 ? "potentially_applicable" : "needs_more_information";
+  return {
+    law_name: lawName,
+    pcode,
+    source_url: sourceUrl,
+    article: article.article,
+    article_text: article.text.slice(0, 1400),
+    level,
+    parent_law_name: parentLawName,
+    parent_pcode: parentPcode,
+    authorization_article: authorizationArticle,
+    applicability,
+    confidence,
+    score: rawScore,
+    rank_score: rawScore + confidence,
+    role_summary: buildRoleSummary(article.text, facts),
+    checklist: buildArticleChecklist(article.text, facts),
+    relation_reason: article.relationReason || "",
+  };
+}
+
+function lawTitleMismatchPenalty(title, facts) {
+  const context = `${facts.rawScenario || ""} ${(facts.lawTypes || []).join(" ")} ${(facts.activities || []).join(" ")}`;
+  const specializedTopics = ["短缺", "廣告", "招募", "罕見疾病", "管制藥", "藥害救濟", "人體試驗", "費收費"];
+  return specializedTopics.some((topic) => title.includes(topic) && !context.includes(topic)) ? 40 : 0;
+}
+
+async function allSettledWithLimit(items, limit, worker) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function run() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      try {
+        results[index] = { status: "fulfilled", value: await worker(items[index], index) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => run()));
+  return results;
+}
+
+async function enrichWithOfficialSubLaws(report, facts, assessments) {
+  const mothers = assessments.filter((item) => item.law.level === "母法").slice(0, 2);
+  const discoveries = await Promise.all(mothers.map(async (mother) => ({
+    mother,
+    children: rankAuthorizedSubLaws(await fetchAuthorizedSubLaws(mother.law.pcode), facts).slice(0, 6),
+  })));
+  const motherBlocksResult = await Promise.allSettled(mothers.map(async (mother) => {
+    const selectedArticles = selectRelevantLawArticles(await fetchOfficialLawText(mother.law.pcode), facts, 2).articles;
+    return selectedArticles.map((article) => makeArticleBlock({
+      lawName: mother.law.title,
+      pcode: mother.law.pcode,
+      sourceUrl: findSourceUrl(mother.law.pcode),
+      level: "母法",
+      article,
+      motherScore: mother.score,
+      titleScore: 5,
+      facts,
+    }));
+  }));
+  const motherBlocks = motherBlocksResult.filter((item) => item.status === "fulfilled").flatMap((item) => item.value);
+
+  const selected = discoveries.flatMap(({ mother, children }) => children.map((child) => ({ mother, child })));
+  const fetched = await allSettledWithLimit(selected, 3, async ({ mother, child }) => {
+    const relevant = selectRelevantLawArticles(await fetchOfficialLawText(child.pcode), facts);
+    const titleScore = child.relevanceScore - lawTitleMismatchPenalty(child.title, facts);
+    return relevant.articles.map((article) => makeArticleBlock({
+      lawName: child.title,
+      pcode: child.pcode,
+      sourceUrl: child.source_url,
+      level: "授權子法",
+      parentLawName: mother.law.title,
+      parentPcode: mother.law.pcode,
+      authorizationArticle: child.article,
+      article,
+      motherScore: mother.score,
+      titleScore,
+      facts,
+    }));
+  });
+  const officialChildren = fetched
+    .filter((item) => item.status === "fulfilled")
+    .flatMap((item) => item.value);
+  const crawledBlocks = [...motherBlocks, ...officialChildren]
+    .filter((item) => item.article_text)
+    .sort((a, b) => b.rank_score - a.rank_score)
+    .filter((item, index, all) => all.findIndex((other) => other.pcode === item.pcode && other.article === item.article) === index)
+    .slice(0, 30);
+  if (!crawledBlocks.length) {
+    return { ...report, applicable_laws: [], crawl_error: "無法從法務部取得法規正文，請稍後重試。" };
+  }
+  return { ...report, applicable_laws: crawledBlocks, confidence: crawledBlocks[0].confidence, official_sub_laws_found: officialChildren.length };
+}
+
 async function fetchLawText(pcode) {
   const cached = cacheGet(lawTextCache, pcode);
   if (cached !== undefined) return cached;
@@ -1203,6 +1494,19 @@ async function fetchLawText(pcode) {
     }
     return "";
   }
+}
+
+async function fetchOfficialLawText(pcode) {
+  const cached = cacheGet(lawTextCache, pcode);
+  if (cached !== undefined) return cached;
+  const url = `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${encodeURIComponent(pcode)}`;
+  const html = await httpGet(url);
+  const text = parseLawHtml(html);
+  if (!text || !/第\s*\d+(?:\s*之\s*\d+)?\s*條/.test(text)) {
+    throw new Error(`法務部頁面未取得有效條文：${pcode}`);
+  }
+  cacheSet(lawTextCache, pcode, text);
+  return text;
 }
 
 async function findPcodeByName(lawName) {
@@ -1414,12 +1718,14 @@ function assessApplicability(facts, candidates) {
 }
 
 function buildApplicableLaws(assessments) {
-  return assessments.slice(0, 5).map((item) => ({
+  return assessments.slice(0, 8).map((item) => ({
     law_name: item.law.title,
     pcode: item.law.pcode,
     source_url: item.law.url,
     article: item.law.article,
     article_text: item.law.articleText,
+    level: item.law.level,
+    parent_law_name: item.law.parentId ? LAW_INDEX.find((law) => law.id === item.law.parentId)?.title || "" : "",
     applicability: item.applicability,
     score: item.score,
   }));

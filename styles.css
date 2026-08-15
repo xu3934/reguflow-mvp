@@ -48,12 +48,52 @@ select {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow);
+  transition: grid-template-columns 220ms ease;
 }
 
 .sidebar {
+  position: relative;
   padding: 28px;
   background: #10241f;
   color: #f1f7f4;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  z-index: 2;
+  top: 16px;
+  right: 12px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.workspace.sidebar-collapsed {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+
+.workspace.sidebar-collapsed .sidebar {
+  padding: 0;
+}
+
+.workspace.sidebar-collapsed .sidebar > :not(.sidebar-toggle) {
+  display: none;
+}
+
+.workspace.sidebar-collapsed .sidebar-toggle {
+  right: 15px;
 }
 
 .brand-block {
@@ -314,6 +354,12 @@ input[type="text"] {
   font-size: 13px;
 }
 
+.primary-button.small {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
 .status-pill,
 .score-badge,
 .law-type {
@@ -462,6 +508,33 @@ input[type="text"] {
 
 .report-card {
   padding: 22px;
+}
+
+.result-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.result-actions > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.result-actions span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.result-action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .primary-report {
@@ -619,12 +692,116 @@ input[type="text"] {
 
 .law-report-list {
   display: grid;
-  gap: 14px;
+  gap: 18px;
   margin-top: 18px;
+}
+
+.law-group {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 8px 28px rgba(23, 32, 28, 0.06);
+}
+
+.law-group-summary {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  cursor: pointer;
+  list-style: none;
+  background: #f5faf7;
+}
+
+.law-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.law-group-summary:hover {
+  background: #edf7f2;
+}
+
+.law-group-heading,
+.law-group-metrics {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.law-group-heading h4 {
+  margin: 0 0 4px;
+  font-size: 19px;
+}
+
+.law-group-heading p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.law-group-metrics {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.collapse-hint {
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.law-group-parent {
+  padding: 10px 20px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  background: #fbfdfc;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.law-group-content {
+  display: grid;
+  gap: 24px;
+  padding: 20px;
+}
+
+.law-article-section {
+  display: grid;
+  gap: 12px;
+  padding-top: 22px;
+  border-top: 2px solid #dfe9e4;
+}
+
+.law-article-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.article-section-title {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.article-section-title h5 {
+  margin: 0;
+  color: var(--accent-dark);
+  font-size: 18px;
+}
+
+.paired-law-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+  gap: 14px;
+  align-items: stretch;
 }
 
 .law-report-item {
   display: grid;
+  align-content: start;
   gap: 10px;
   padding: 16px;
   border: 1px solid var(--line);
@@ -640,6 +817,130 @@ input[type="text"] {
 .law-report-item p {
   color: var(--ink);
   line-height: 1.65;
+}
+
+.law-source-block {
+  border-left: 4px solid #1e6b43;
+  background: #fbfdfc;
+}
+
+.law-brief-block {
+  border-left: 4px solid #d59b28;
+  background: #fffcf4;
+}
+
+.law-brief-block ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.checkbox-list {
+  display: grid;
+  gap: 8px;
+}
+
+.checkbox-list label {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 9px 10px;
+  border: 1px solid #eadfbd;
+  border-radius: 7px;
+  background: #ffffff;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.checkbox-list input {
+  width: 17px;
+  height: 17px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.checkbox-list label:has(input:checked) {
+  border-color: #86c7b8;
+  background: #edf9f4;
+}
+
+.checkbox-list label:has(input:checked) span {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.law-title-row > div {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+
+.rank-number {
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.fit-metrics {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.applicability-pill,
+.confidence-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.applicability-pill.likely_applicable {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.applicability-pill.potentially_applicable {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.applicability-pill.needs_more_information {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.confidence-pill {
+  color: #1e429f;
+  background: #eaf1ff;
+}
+
+.article-original {
+  white-space: pre-line;
+}
+
+.relation-reason {
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: #6b4f00 !important;
+  background: #fff4d6;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.checklist-label {
+  margin-top: 6px;
+}
+
+.crawl-error {
+  padding: 18px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+  background: #fff1f2;
 }
 
 .law-box {
@@ -944,8 +1245,20 @@ summary {
   .form-grid,
   .law-list,
   .candidate-item,
-  .stage-grid {
+  .stage-grid,
+  .paired-law-row {
     grid-template-columns: 1fr;
+  }
+
+  .law-group-summary,
+  .article-section-title,
+  .result-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .law-group-metrics {
+    justify-content: flex-start;
   }
 
   .stage-card::after {
@@ -969,5 +1282,145 @@ summary {
 
   h2 {
     font-size: 32px;
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 8mm;
+  }
+
+  body {
+    background: #ffffff;
+  }
+
+  .app-shell {
+    padding: 0;
+  }
+
+  .workspace {
+    display: block;
+    max-width: none;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .sidebar,
+  .topbar,
+  .mode-tabs,
+  .input-section,
+  .progress-section,
+  .result-actions,
+  #answersCard,
+  .report-card:has(#processStages),
+  #nhiCard {
+    display: none !important;
+  }
+
+  .main-panel,
+  .report-card {
+    padding: 0;
+  }
+
+  .results-grid {
+    display: block !important;
+    margin: 0;
+  }
+
+  .law-group {
+    overflow: visible;
+    break-inside: auto;
+    margin-bottom: 16px;
+    box-shadow: none;
+  }
+
+  .law-group-summary,
+  .law-group-parent {
+    break-after: avoid-page;
+  }
+
+  .law-group-summary {
+    padding: 12px 14px;
+  }
+
+  .law-group-content {
+    display: block;
+    padding: 10px;
+  }
+
+  .article-section-title {
+    break-after: avoid-page;
+  }
+
+  .law-article-section {
+    display: block;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+    margin-top: 12px;
+    padding-top: 10px;
+  }
+
+  .paired-law-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: 8px;
+    align-items: start;
+  }
+
+  .law-report-item {
+    display: block;
+    break-inside: auto;
+    min-width: 0;
+    margin-bottom: 0;
+    padding: 8px 9px;
+  }
+
+  .law-report-item > * + * {
+    margin-top: 5px;
+  }
+
+  .law-source-block,
+  .law-brief-block {
+    min-height: 0;
+  }
+
+  .article-original,
+  .law-brief-block p,
+  .checkbox-list label {
+    overflow-wrap: anywhere;
+    font-size: 8.5pt;
+    line-height: 1.38;
+  }
+
+  .checkbox-list label {
+    break-inside: avoid;
+    grid-template-columns: 14px minmax(0, 1fr);
+    gap: 5px;
+    padding: 5px 6px;
+  }
+
+  .checkbox-list {
+    gap: 5px;
+  }
+
+  .checkbox-list input {
+    width: 13px;
+    height: 13px;
+  }
+
+  .law-report-item h4,
+  .law-brief-block h4 {
+    font-size: 11pt;
+  }
+
+  .article-section-title h5 {
+    font-size: 12pt;
+  }
+
+  .section-label,
+  .source-link,
+  .relation-reason {
+    font-size: 8pt;
   }
 }
