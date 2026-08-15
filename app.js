@@ -752,7 +752,7 @@ function renderLawArticlePair(law, role) {
           <p class="article-original"><strong>${escapeHtml(law.article)}</strong> ${escapeHtml(law.article_text)}</p>
         </article>
         <article class="law-report-item law-brief-block">
-          <p class="section-label">對應重點整理</p>
+          <p class="section-label">對應重點整理 · ${law.insight_source === "sol" ? "Sol 逐條整理" : "Sol 格式備援"}</p>
           <p>${escapeHtml(law.role_summary || "本條尚無可用摘要。")}</p>
           <p class="section-label checklist-label">本條待辦清單</p>
           <div class="checklist checkbox-list">${(law.checklist || ["請由法規或法務人員複核本條要求。"]).map((item, itemIndex) => {
@@ -899,7 +899,8 @@ async function checkApiHealth() {
       const modelText = health.models
         ? `適用性／問答／競品／流程圖：${health.models.applicability}；摘要／待辦：${health.models.summary}`
         : `模型：${health.model}`;
-      apiStatus.textContent = `🟢 後端 API Online，OpenAI 已連線。${modelText}。管線：${health.pipeline || "A→法務部爬取→混合模型分析"}`;
+      const versionText = health.version ? `版本：${health.version}。` : "";
+      apiStatus.textContent = `🟢 後端 API Online，OpenAI 已連線。${versionText}${modelText}。管線：${health.pipeline || "A→法務部爬取→混合模型分析"}`;
       sidebarStatus.textContent = "🟢 Backend API Online";
     } else {
       setModeBadge("Local fallback", "local_fallback");

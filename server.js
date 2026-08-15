@@ -6,16 +6,23 @@ loadDotEnv();
 
 const PORT = Number(process.env.PORT || 3000);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
+const APP_VERSION = "20260815v15";
+const OPENAI_MODEL = normalizeOpenAIModelId(process.env.OPENAI_MODEL, "gpt-5.6-luna");
 // Prompt A (pick a mother law from a shortlist) and Prompt B (pull authorizing
 // clauses out of a statute) are classification/extraction, not drafting — a
 // smaller model handles them at a fraction of the latency.
-const OPENAI_FAST_MODEL = process.env.OPENAI_FAST_MODEL || "gpt-5.6-luna";
-const OPENAI_SUMMARY_MODEL = process.env.OPENAI_SUMMARY_MODEL || "gpt-5.6-sol";
-const OPENAI_EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
-const OPENAI_REASONING_EFFORT = ["none", "low", "medium", "high", "xhigh", "max"].includes(process.env.OPENAI_REASONING_EFFORT)
-  ? process.env.OPENAI_REASONING_EFFORT
+const OPENAI_FAST_MODEL = normalizeOpenAIModelId(process.env.OPENAI_FAST_MODEL, "gpt-5.6-luna");
+const OPENAI_SUMMARY_MODEL = normalizeOpenAIModelId(process.env.OPENAI_SUMMARY_MODEL, "gpt-5.6-sol");
+const OPENAI_EMBEDDING_MODEL = normalizeOpenAIModelId(process.env.OPENAI_EMBEDDING_MODEL, "text-embedding-3-small");
+const requestedReasoningEffort = String(process.env.OPENAI_REASONING_EFFORT || "none").trim().toLowerCase();
+const OPENAI_REASONING_EFFORT = ["none", "low", "medium", "high", "xhigh", "max"].includes(requestedReasoningEffort)
+  ? requestedReasoningEffort
   : "none";
+
+function normalizeOpenAIModelId(value, fallback) {
+  const model = String(value || fallback).trim();
+  return /^(gpt-|text-embedding-)/i.test(model) ? model.toLowerCase() : model;
+}
 
 // Scraped statutes and the sub-laws they authorize change on a legislative
 // timescale, so both are cached across requests. Only successful lookups are
@@ -462,6 +469,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/health") {
       return sendJson(res, 200, {
         apiConfigured: Boolean(OPENAI_API_KEY),
+        version: APP_VERSION,
         provider: "openai",
         model: OPENAI_API_KEY ? OPENAI_MODEL : null,
         models: OPENAI_API_KEY ? {
@@ -647,31 +655,43 @@ async function analyzeWithPipeline(payload, onProgress = () => {}) {
       competitorText = `\n\n以下是健保署開放資料「健保用藥品項檔」（快照日期 ${nhiCompetitors.meta.generatedAt}）中查得的同類已收載品項，引用競品給付現況時只能使用下列品項與數字，不得自行補充其他品項或價格：\n${lines.join("\n")}`;
     }
 
+    // Build the official article blocks first, assign immutable IDs, then give
+    // each model only the amount of text needed for its task. This avoids
+    // sending the same 20k-character statute bundle four times and prevents
+    // model-generated PCode/article formatting from breaking the merge.
+    onProgress(5, "正在建立法條固定 ID 與精簡 AI 上下文");
+    const groundedReport = await enrichWithOfficialSubLaws(localReport, facts, assessments);
+    const groundedLaws = assignAiBlockIds(groundedReport.applicable_laws);
+    const applicabilityContext = buildCompactLawContext(groundedLaws, { limit: 24, articleChars: 480 });
+    const summaryContext = buildCompactLawContext(groundedLaws, { limit: 18, articleChars: 720 });
+    const answersContext = buildCompactLawContext(groundedLaws, { limit: 14, articleChars: 560 });
+    const flowchartContext = buildCompactLawContext(groundedLaws, { limit: 10, articleChars: 420 });
+
     // Step 3f: Run four independent model jobs in parallel. Luna handles
     // applicability, direct Q&A, competitor-query extraction and the compact
     // flowchart; Sol is reserved for summaries and article-specific actions.
     onProgress(5, "平行執行：Luna 適用性、問答、競品與流程圖；Sol 摘要與待辦");
     const [resultApplicability, resultSummary, resultD, resultAnswers] = await Promise.allSettled([
       trackAiJob(
-        runPromptApplicability(allLawTexts, role, scenario, profile),
+        runPromptApplicability(applicabilityContext, role, scenario, profile),
         "Luna 適用性判斷已完成",
         "Luna 適用性判斷失敗，將使用本地備援",
         onProgress
       ),
       trackAiJob(
-        runPromptSummary(allLawTexts, role, scenario, profile),
+        runPromptSummary(summaryContext, role, scenario, profile),
         "Sol 摘要與待辦已完成",
-        "Sol 摘要失敗，將使用本地備援",
+        "Sol 摘要失敗，將改用 Sol 格式備援",
         onProgress
       ),
       trackAiJob(
-        runPromptD(allLawTexts, role, scenario, profile),
+        runPromptD(flowchartContext, role, scenario, profile),
         "Luna 精簡流程圖已完成",
         "Luna 流程圖失敗，將使用本地備援",
         onProgress
       ),
       trackAiJob(
-        runPromptAnswersAndCompetitor(allLawTexts, role, scenario, profile, competitorText),
+        runPromptAnswersAndCompetitor(answersContext, role, scenario, profile, competitorText),
         "Luna 直接問答與競品查詢詞已完成",
         "Luna 問答與競品查詢失敗，將顯示本地備援",
         onProgress
@@ -706,10 +726,9 @@ async function analyzeWithPipeline(payload, onProgress = () => {}) {
     // may omit UI fields or combine several article numbers into one record.
     // The grounded blocks always contain one official article, confidence,
     // role summary and checklist, so the OpenAI and fallback paths render alike.
-    onProgress(7, "正在產出三階段精簡流程圖卡片");
-    const groundedReport = await enrichWithOfficialSubLaws(localReport, facts, assessments);
+    onProgress(7, "正在合併三階段精簡流程圖與逐條重點");
     const judgedLaws = mergeAiApplicability(
-      groundedReport.applicable_laws,
+      groundedLaws,
       applicabilityData?.applicable_laws
     );
     const applicable_laws = mergeAiLawInsights(
@@ -773,12 +792,37 @@ async function analyzeWithPipeline(payload, onProgress = () => {}) {
 }
 
 function findMatchingAiLaw(law, aiItems) {
+  const blockId = String(law.block_id || "").trim().toUpperCase();
+  if (blockId) {
+    const blockMatch = aiItems.find(
+      (item) => String(item?.block_id || "").trim().toUpperCase() === blockId
+    );
+    if (blockMatch) return blockMatch;
+  }
   const articleNumber = String(law.article || "").match(/\d+/)?.[0];
   return aiItems.find((item) => {
-    if (!item || String(item.pcode || "") !== String(law.pcode || "")) return false;
+    if (!item || String(item.pcode || "").trim().toUpperCase() !== String(law.pcode || "").trim().toUpperCase()) return false;
     if (!articleNumber) return false;
-    return new RegExp(`第\\s*${articleNumber}\\s*條`).test(String(item.article || ""));
+    return String(item.article || "").match(/\d+/)?.[0] === articleNumber;
   });
+}
+
+function assignAiBlockIds(laws) {
+  return (Array.isArray(laws) ? laws : []).map((law, index) => ({
+    ...law,
+    block_id: `B${String(index + 1).padStart(2, "0")}`,
+  }));
+}
+
+function buildCompactLawContext(laws, { limit = 16, articleChars = 650 } = {}) {
+  return (Array.isArray(laws) ? laws : [])
+    .slice(0, limit)
+    .map((law) => {
+      const text = String(law.article_text || "").replace(/\s+/g, " ").trim().slice(0, articleChars);
+      const relation = law.relation_reason ? `\n關聯原因：${law.relation_reason}` : "";
+      return `[${law.block_id}] ${law.law_name}｜${law.pcode}｜${law.article}\n${text}${relation}`;
+    })
+    .join("\n\n");
 }
 
 function trackAiJob(promise, successMessage, failureMessage, onProgress) {
@@ -814,12 +858,15 @@ function mergeAiLawInsights(groundedLaws, aiLaws, facts) {
   const aiItems = Array.isArray(aiLaws) ? aiLaws : [];
   return (Array.isArray(groundedLaws) ? groundedLaws : []).map((law) => {
     const ai = findMatchingAiLaw(law, aiItems);
+    const fallbackSummary = buildRoleSummary(law.article_text, facts, law);
+    const fallbackChecklist = buildArticleChecklist(law.article_text, facts, law);
     return {
       ...law,
-      role_summary: String(ai?.role_summary || law.role_summary || buildRoleSummary(law.article_text, facts)),
+      role_summary: String(ai?.role_summary || fallbackSummary),
       checklist: Array.isArray(ai?.checklist) && ai.checklist.length
         ? ai.checklist.map(String).slice(0, 4)
-        : law.checklist,
+        : fallbackChecklist,
+      insight_source: ai ? "sol" : "sol_style_fallback",
       confidence: Number.isFinite(Number(law.confidence)) ? Number(law.confidence) : 60,
     };
   });
@@ -1137,6 +1184,38 @@ ${content}
 // Prompt A — identify mother law PCode from user intent + role + law_type
 // ---------------------------------------------------------------------------
 
+const MOTHER_LAW_OUTPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["pcode", "law_name", "competitor_query"],
+  properties: {
+    pcode: { type: "string" },
+    law_name: { type: "string" },
+    competitor_query: { type: "string" },
+  },
+};
+
+const SUB_LAW_OUTPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["sub_laws"],
+  properties: {
+    sub_laws: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["source_law", "article", "search_tag"],
+        properties: {
+          source_law: { type: "string" },
+          article: { type: "string" },
+          search_tag: { type: "string" },
+        },
+      },
+    },
+  },
+};
+
 async function runPromptA(payload) {
   const userIntent = payload.user_intent || payload.scenario || "";
   const role = payload.role || "進口代理商";
@@ -1162,6 +1241,9 @@ ${lawListText}`;
       "你是台灣生醫法規專家。請根據使用者情境判斷最相關的母法 PCode 與健保品項查詢字串，只輸出 JSON，不要有其他說明。",
     input,
     model: OPENAI_FAST_MODEL,
+    schemaName: "rxplain_mother_law",
+    jsonSchema: MOTHER_LAW_OUTPUT_SCHEMA,
+    maxOutputTokens: 900,
   });
 
   const result = parseJsonObject(text);
@@ -1185,23 +1267,25 @@ async function runPromptB(motherLawText, lawName, cacheKey) {
 
 ${motherLawText}
 
-請找出其中授權訂定子法的條文，例如含有「由中央主管機關定之」、「另以辦法定之」、「依法訂定」等授權語句的條文，並以 JSON 陣列格式輸出，每筆包含：
+請找出其中授權訂定子法的條文，例如含有「由中央主管機關定之」、「另以辦法定之」、「依法訂定」等授權語句的條文，並輸出含有 sub_laws 陣列的 JSON 物件，每筆包含：
 - source_law: 母法名稱
 - article: 條文編號
 - search_tag: 被授權子法的可能名稱或關鍵字（用於搜尋）
 
-只輸出 JSON 陣列，不要有其他說明。`;
+只輸出 JSON 物件，不要有其他說明。`;
 
   const text = await callOpenAI({
     instructions:
-      "你是台灣法規文本分析專家。請從母法條文中識別授權子法的條款，嚴格以 JSON 陣列格式輸出，不要有任何其他說明。",
+      "你是台灣法規文本分析專家。請從母法條文中識別授權子法的條款，只輸出符合指定結構的 JSON。",
     input,
     model: OPENAI_FAST_MODEL,
+    schemaName: "rxplain_sub_laws",
+    jsonSchema: SUB_LAW_OUTPUT_SCHEMA,
+    maxOutputTokens: 1800,
   });
 
-  const result = parseJsonSafe(text);
-  if (!Array.isArray(result)) return [];
-  const refs = result.slice(0, 4);
+  const result = parseJsonObject(text);
+  const refs = Array.isArray(result?.sub_laws) ? result.sub_laws.slice(0, 4) : [];
   if (cacheKey && refs.length) cacheSet(subLawCache, cacheKey, refs);
   return refs;
 }
@@ -1210,22 +1294,115 @@ ${motherLawText}
 // Prompt C1 (Luna) — applicability and missing facts
 // ---------------------------------------------------------------------------
 
-async function runPromptApplicability(allLawTexts, role, scenario, profile) {
+const APPLICABILITY_OUTPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["applicable_laws", "missing_facts"],
+  properties: {
+    applicable_laws: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["block_id", "applicability", "confidence"],
+        properties: {
+          block_id: { type: "string" },
+          applicability: {
+            type: "string",
+            enum: ["likely_applicable", "potentially_applicable", "needs_more_information"],
+          },
+          confidence: { type: "integer", minimum: 0, maximum: 100 },
+        },
+      },
+    },
+    missing_facts: { type: "array", items: { type: "string" } },
+  },
+};
+
+const SUMMARY_OUTPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["role", "summary_points", "checklist", "law_insights"],
+  properties: {
+    role: { type: "string" },
+    summary_points: { type: "array", items: { type: "string" } },
+    checklist: { type: "array", items: { type: "string" } },
+    law_insights: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["block_id", "role_summary", "checklist"],
+        properties: {
+          block_id: { type: "string" },
+          role_summary: { type: "string" },
+          checklist: { type: "array", items: { type: "string" } },
+        },
+      },
+    },
+  },
+};
+
+const ANSWERS_OUTPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["direct_answers", "competitor_query"],
+  properties: {
+    direct_answers: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["question", "answer", "grounding"],
+        properties: {
+          question: { type: "string" },
+          answer: { type: "string" },
+          grounding: { type: "string", enum: ["law", "nhi_data", "not_available"] },
+        },
+      },
+    },
+    competitor_query: { type: "string" },
+  },
+};
+
+const FLOWCHART_OUTPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["process_stages"],
+  properties: {
+    process_stages: {
+      type: "array",
+      minItems: 3,
+      maxItems: 3,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["stage_title", "law_name", "control_points", "owner"],
+        properties: {
+          stage_title: { type: "string" },
+          law_name: { type: "string" },
+          control_points: { type: "array", items: { type: "string" } },
+          owner: { type: "string" },
+        },
+      },
+    },
+  },
+};
+
+async function runPromptApplicability(lawContext, role, scenario, profile) {
   const roleLabel = profile ? `${role}（${profile.label} 視角）` : role;
   const input = `以下是使用者實際描述的情境與需求：
 ${scenario || "（使用者未提供詳細描述）"}
 
 以下是與本案相關的法規全文：
 
-${allLawTexts}
+${lawContext}
 
 請只判斷哪些單一法條適用於角色「${roleLabel}」，以及尚缺哪些會改變適用性判斷的事實。輸出：
 {
   "applicable_laws": [
     {
-      "law_name": "法規名稱",
-      "pcode": "法規代碼",
-      "article": "單一相關條文，例如第6條",
+      "block_id": "原文標示的固定區塊 ID，例如 B01",
       "applicability": "likely_applicable | potentially_applicable | needs_more_information",
       "confidence": 85
     }
@@ -1233,13 +1410,16 @@ ${allLawTexts}
   "missing_facts": ["尚缺資訊1", "尚缺資訊2"]
 }
 
-applicable_laws 的規則：每一筆只能放一條法條；不得把「第2條、第3條、第5條」合併在同一筆。相互引用的補充條文也要各自獨立列出。
+applicable_laws 的規則：每一筆只能引用一個既有 block_id，不得自行改寫 ID，也不得新增不存在的法條。
 只輸出 JSON，不要有其他說明。`;
 
   const text = await callOpenAI({
     instructions: "你是台灣生醫法規適用性分析員。只根據提供的法規與情境判斷，不撰寫摘要或待辦。每筆只列一條法條，只輸出 JSON。",
     input,
     model: OPENAI_MODEL,
+    schemaName: "rxplain_applicability",
+    jsonSchema: APPLICABILITY_OUTPUT_SCHEMA,
+    maxOutputTokens: 2400,
   });
 
   return parseJsonObject(text);
@@ -1249,13 +1429,13 @@ applicable_laws 的規則：每一筆只能放一條法條；不得把「第2條
 // Prompt C2 (Sol) — summaries and article-specific actions
 // ---------------------------------------------------------------------------
 
-async function runPromptSummary(allLawTexts, role, scenario, profile) {
+async function runPromptSummary(lawContext, role, scenario, profile) {
   const roleLabel = profile ? `${role}（${profile.label} 視角）` : role;
   const input = `使用者情境：
 ${scenario || "（使用者未提供詳細描述）"}
 
 法規全文：
-${allLawTexts}
+${lawContext}
 
 請針對角色「${roleLabel}」輸出：
 {
@@ -1264,15 +1444,14 @@ ${allLawTexts}
   "checklist": ["跨法規總待辦，最多8點"],
   "law_insights": [
     {
-      "pcode": "法規代碼",
-      "article": "單一條文，例如第2條",
+      "block_id": "原文標示的固定區塊 ID，例如 B01",
       "role_summary": "本條對角色的具體影響",
       "checklist": ["直接取自本條義務的具體待辦，最多4點"]
     }
   ]
 }
 
-law_insights 每筆只能對應一條法條。待辦必須寫出條文中的具體對象、資料欄位、期限、文件或責任，不得只寫「確認符合法規」「建立紀錄」「請法務複核」等通用句。
+law_insights 每筆只能對應一個既有 block_id，且應盡量涵蓋所有提供的區塊。待辦必須寫出條文中的具體對象、資料欄位、期限、文件或責任，不得只寫「確認符合法規」「建立紀錄」「請法務複核」等通用句。
 只輸出 JSON。`;
 
   const baseInstructions =
@@ -1281,6 +1460,9 @@ law_insights 每筆只能對應一條法條。待辦必須寫出條文中的具�
     instructions: profile ? `${baseInstructions}\n\n職能視角要求：${profile.promptC}` : baseInstructions,
     input,
     model: OPENAI_SUMMARY_MODEL,
+    schemaName: "rxplain_summary",
+    jsonSchema: SUMMARY_OUTPUT_SCHEMA,
+    maxOutputTokens: 6500,
   });
   return parseJsonObject(text);
 }
@@ -1289,7 +1471,7 @@ law_insights 每筆只能對應一條法條。待辦必須寫出條文中的具�
 // Prompt C3 (Luna) — direct answers and competitor-query extraction
 // ---------------------------------------------------------------------------
 
-async function runPromptAnswersAndCompetitor(allLawTexts, role, scenario, profile, competitorText) {
+async function runPromptAnswersAndCompetitor(lawContext, role, scenario, profile, competitorText) {
   const roleLabel = profile ? `${role}（${profile.label} 視角）` : role;
   const competitorContext = competitorText || "\n\n目前尚未取得競品資料；不得自行虛構品項或價格。";
   const input = `使用者情境與實際提問：
@@ -1298,7 +1480,7 @@ ${scenario || "（使用者未提供詳細描述）"}
 角色：${roleLabel}
 
 法規全文：
-${allLawTexts}${competitorContext}
+${lawContext}${competitorContext}
 
 請輸出：
 {
@@ -1315,6 +1497,9 @@ competitor_query 優先使用具體 INN；未提供成分但明確提及癌症�
     instructions: "你是台灣生醫法規問答與健保競品查詢助手。使用繁體中文，只依提供資料直接回答，並產生一個可用的健保查詢詞。只輸出 JSON。",
     input,
     model: OPENAI_MODEL,
+    schemaName: "rxplain_answers",
+    jsonSchema: ANSWERS_OUTPUT_SCHEMA,
+    maxOutputTokens: 3200,
   });
   return parseJsonObject(text);
 }
@@ -1323,7 +1508,7 @@ competitor_query 優先使用具體 INN；未提供成分但明確提及癌症�
 // Prompt D — process stages (exactly 3 stages)
 // ---------------------------------------------------------------------------
 
-async function runPromptD(allLawTexts, role, scenario, profile) {
+async function runPromptD(lawContext, role, scenario, profile) {
   const roleLabel = profile ? `${role}（${profile.label} 視角）` : role;
   const stageGuidance = profile ? `\n\n階段切分要求：${profile.promptD}` : "";
   const input = `以下是使用者實際描述的情境與需求：
@@ -1331,9 +1516,9 @@ ${scenario || "（使用者未提供詳細描述）"}
 
 以下是與本案相關的法規全文：
 
-${allLawTexts}
+${lawContext}
 
-請根據以上法規內容，並緊扣使用者描述的實際情境與需求，針對角色「${roleLabel}」，輸出恰好 3 個作業階段的 JSON 陣列，每個階段包含：
+請根據以上法規內容，並緊扣使用者描述的實際情境與需求，針對角色「${roleLabel}」，輸出含有 process_stages 的 JSON 物件，其中 process_stages 恰好包含 3 個作業階段，每個階段包含：
 - stage_title: 階段名稱（例如「【源頭管理】供應來源確認」）
 - law_name: 該階段依據的主要法規名稱
 - control_points: 該階段最重要的 2 至 3 個查核重點（字串陣列，每點 30 字以內）
@@ -1341,18 +1526,21 @@ ${allLawTexts}
 
 每個階段只保留必要資訊，階段名稱 24 字以內、主要法規只列 1 至 2 部，不得把整段法規摘要塞入流程圖。
 
-只輸出 JSON 陣列，不要有其他說明。`;
+只輸出 JSON 物件，不要有其他說明。`;
 
   const text = await callOpenAI({
     instructions:
-      "你是台灣生醫法規顧問。請根據提供的法規內容規劃 3 個作業階段，嚴格以 JSON 陣列格式輸出，不要有任何其他說明。",
+      "你是台灣生醫法規顧問。請根據提供的法規內容規劃 3 個作業階段，只輸出符合指定結構的 JSON。",
     input,
     model: OPENAI_MODEL,
+    schemaName: "rxplain_flowchart",
+    jsonSchema: FLOWCHART_OUTPUT_SCHEMA,
+    maxOutputTokens: 2400,
   });
 
-  const result = parseJsonSafe(text);
-  if (!Array.isArray(result)) return null;
-  return result;
+  const result = parseJsonObject(text);
+  if (!Array.isArray(result?.process_stages)) return null;
+  return result.process_stages;
 }
 
 // ---------------------------------------------------------------------------
@@ -1582,24 +1770,186 @@ function selectRelevantLawArticles(text, facts, maxArticles = 2) {
   };
 }
 
-function buildArticleChecklist(articleText, facts) {
+const SOL_STYLE_CHECKLIST_REFERENCES = Object.freeze({
+  "L0030144|第2條": [
+    "按許可字號分開建檔",
+    "保存各批輸入數量及報關日期",
+    "保存各批製造日期及有效期間或保存期限",
+    "保存組織、細胞追蹤編碼與製造廠資訊",
+  ],
+  "L0030144|第3條": [
+    "確認代理商法律身分是否為許可所有人或其他販賣藥商",
+    "保存供應商名稱、地址、聯絡人及電話",
+    "保存每次進貨批號、數量、日期及效期資料",
+    "保存各醫院每次交貨的批號、數量與日期",
+  ],
+  "L0030144|第4條": [
+    "交貨文件完整標示許可字號、批號、數量、製造日期及效期",
+    "與醫院確認病人層級追蹤責任及資料交接邊界",
+    "避免代理商取得非必要病人個資",
+  ],
+  "L0030144|第5條": [
+    "設定第二條及第三條資料的保存期限為產品保存期限屆至後至少三十年",
+    "確保電子系統、備份與資料格式可長期讀取",
+    "在原廠及物流商合約中納入長期資料提供與保存義務",
+  ],
+  "L0030147|第3條": [
+    "確認申請時點、負責單位及核准狀態",
+    "逐項準備查驗登記所需文件與資料",
+    "核對標籤、仿單、包裝內容及核准版本",
+  ],
+  "L0030147|第6條": [
+    "追蹤領取通知日起三個月期限",
+    "準備核定版標籤、仿單及包裝實體或彩稿",
+    "完成藥品仿單查詢平台建檔",
+    "領取前備齊GMP、GDP及出產國許可製售證明",
+  ],
+  "L0030148|第2條": [
+    "建立提供者合適性判定、篩選與測試紀錄的可稽核保存機制",
+    "確認製造與品質系統涵蓋提供者合適性及感染風險管制",
+  ],
+  "L0030148|第3條": [
+    "取得提供者篩選、測試及判定SOP",
+    "確認受託機構資格及責任分工",
+    "確認判定醫師具指定領域至少一年實務經驗",
+    "在品質協議中納入查核權及異常通報",
+  ],
+  "L0030087|第2條": [
+    "確認申請時點、負責單位及核准狀態",
+    "逐項準備並複核申請書、證照影本、廠商基本資料及費用",
+    "建立許可與檢查紀錄的可稽核保存機制",
+    "確認輸入、倉儲、運輸及委外責任分工",
+  ],
+  "L0030087|第3條": [
+    "建立許可登記事項及變更紀錄清冊",
+    "變更事項發生後三十日內提出申請",
+    "逐項複核變更文件並追蹤主管機關核准",
+    "將法定期限納入專案時程及提醒",
+  ],
+  "L0030087|第4條": [
+    "在許可有效期屆滿前三個月啟動展延申請",
+    "備妥原許可執照、費用及展延所需資料",
+    "保存展延審查與核准紀錄",
+  ],
+  "L0030057|第3條": [
+    "確認申請時點、負責單位及核准狀態",
+    "逐項準備申請表與附件並依指定語言及格式提交",
+    "核對標籤、仿單與包裝內容及核准版本",
+    "將補件或法定期限納入專案時程並設定提醒",
+  ],
+});
+
+const SOL_STYLE_SUMMARY_REFERENCES = Object.freeze({
+  "L0030144|第2條": "若{role}是再生醫療製劑許可所有人，須依各許可證／許可字號分開建檔，逐批保存輸入、報關、製造與效期資料，並保留組織／細胞追蹤編碼、製造廠及供應流向資訊。",
+  "L0030144|第3條": "若{role}不是許可所有人而是從事販賣的藥商，仍須自行保存供應商、每次進貨批號與效期，以及供應醫院的對象、數量與交貨日期。",
+  "L0030144|第4條": "本條直接義務人是使用製劑的醫療機構；{role}應提供完整批號與來源資料，並在供應合約中界定醫院建立病人層級追蹤、代理商避免取得非必要病人個資的責任邊界。",
+  "L0030144|第5條": "{role}若屬第二條或第三條的藥商，相關資料須保存至產品保存期限屆至後至少三十年；醫療機構另有十五年或未成年病人延長保存規定，應在合約及系統中分開設定。",
+  "L0030147|第3條": "對{role}而言，有附款許可製劑的標籤、仿單、包裝及申請附件須符合查驗登記規定；領取許可函時也必須完成指定程序。",
+  "L0030147|第6條": "若查驗登記核准，{role}須在領取通知後三個月內完成核定版標籤、仿單、包裝及平台建檔，並備齊GMP、GDP與出產國許可製售證明後領取許可。",
+  "L0030148|第2條": "對{role}而言，原廠須完成組織／細胞提供者的健康史與病史篩選、身體理學檢查及傳染性病原風險評估，並留存可供代理商查核的判定與測試紀錄。",
+  "L0030148|第3條": "作為輸入端的{role}，應督促國外原廠或受託機構按標準程序完成提供者篩選、測試與合適性判定，並確認受託資格、判定醫師經驗及異常通報責任。",
+  "L0030087|第2條": "對{role}而言，申請西藥運銷許可時須彙整申請書、藥商許可執照、廠商資料及費用，並保存主管機關查核與核准紀錄。",
+  "L0030087|第3條": "{role}應維護西藥運銷許可登記事項清冊；名稱、地址、負責人、營業項目或其他登記事項變更時，須於法定期限內提出申請並追蹤核准。",
+  "L0030087|第4條": "{role}應管理西藥運銷許可有效期間，於期滿前三個月提出展延申請，備妥原許可執照、費用及所需資料，並保存展延結果。",
+  "L0030057|第3條": "對{role}而言，查驗登記申請須使用主管機關指定格式與語言，逐項檢附申請書、技術資料、標籤仿單及其他附件，並追蹤補件與審查期限。",
+});
+
+function solStyleReferenceKey(lawMeta = {}) {
+  const pcode = String(lawMeta.pcode || "").trim().toUpperCase();
+  const article = String(lawMeta.article || "").replace(/\s+/g, "");
+  return `${pcode}|${article}`;
+}
+
+function buildArticleChecklist(articleText, facts, lawMeta = {}) {
+  const reference = SOL_STYLE_CHECKLIST_REFERENCES[solStyleReferenceKey(lawMeta)];
+  if (reference) return [...reference];
   const items = [];
   const add = (item) => { if (!items.includes(item)) items.push(item); };
-  if (/申請|查驗登記|核准/.test(articleText)) add("確認申請時點、負責單位及核准狀態");
-  if (/檢附|文件|資料/.test(articleText)) add("逐項準備並複核本條要求的文件與資料");
-  if (/保存|紀錄|流向|追蹤/.test(articleText)) add("建立可稽核的保存、流向與追溯紀錄");
-  if (/製造|GMP|品質/.test(articleText)) add("確認製造與品質系統符合本條要求");
-  if (/輸入|運輸|運銷|配送|倉儲/.test(articleText)) add("確認輸入、倉儲、運輸及委外責任分工");
-  if (/標籤|仿單|包裝/.test(articleText)) add("核對標籤、仿單與包裝內容及核准版本");
-  if (/期限|期間|屆滿|日內|月內|年/.test(articleText)) add("將法定期限納入專案時程並設定提醒");
-  if (!items.length) add(`由${facts.role || "負責單位"}確認本條義務、證據與負責人`);
+  if (/許可證或許可字號/.test(articleText) && /批號/.test(articleText)) {
+    add("依各製劑許可證或許可字號分開建檔，不得混用不同產品或許可資料");
+  }
+  if (/生產數量|輸入數量|報關日期|製造日期|有效期間|保存期限/.test(articleText)) {
+    add("逐批保存生產或輸入數量、報關日期、製造日期及有效期間／保存期限");
+  }
+  if (/組織、細胞追蹤編碼|有效成分之製造廠/.test(articleText)) {
+    add("保存組織／細胞追蹤編碼，以及有效成分製造廠名稱、地址與國別");
+  }
+  if (/供應對象名稱|聯絡人與電話|交貨日期/.test(articleText)) {
+    add("逐批記錄供應對象名稱、地址、聯絡人、電話、供應數量及交貨日期");
+  }
+  if (/供應商名稱|各次進貨/.test(articleText)) {
+    add("記錄供應商聯絡資料，以及每次進貨的批號、數量與日期");
+  }
+  if (/病人姓名|身分證明文件號碼/.test(articleText)) {
+    add("依批號保存使用病人姓名、身分證明文件號碼及聯絡資料");
+  }
+  const years = [...String(articleText).matchAll(/保存至少([一二三四五六七八九十百\d]+)年/g)].map((match) => match[1]);
+  for (const year of years) add(`設定資料保存年限：至少${year}年，並建立屆期與銷毀管制`);
+  if (/申請書|申請表|查驗登記|申請.*核准|應.*申請/.test(articleText)) {
+    add("確認申請時點、申請人、負責單位及目前核准狀態");
+    add("逐項準備並複核本條要求的申請文件、證照、費用及技術資料");
+  }
+  if (/有效期間|期滿|展延/.test(articleText)) add("建立許可效期清冊，於法定期限前啟動展延並追蹤核准");
+  if (/變更|移轉|換發|補發/.test(articleText)) add("建立登記事項變更台帳，於法定期限內申請變更、移轉、換發或補發");
+  if (/標籤|仿單|包裝/.test(articleText)) add("核對標籤、仿單、包裝內容及核准版本，留存版次與覆核紀錄");
+  if (/藥物優良製造準則|優良運銷|GMP|GDP|製造品質/.test(articleText)) {
+    add("確認製造廠與品質系統符合本條要求，保存GMP／GDP及查核證明");
+  }
+  if (/提供者|合適性判定|篩選|測試/.test(articleText)) {
+    add("取得提供者篩選、測試及合適性判定SOP與結果紀錄");
+    add("在品質協議中界定原廠、受託機構與代理商的責任及異常通報");
+  }
+  if (/委託製造|委託.*檢驗/.test(articleText)) add("委託前確認核准與雙方資格，簽訂品質協議並保存放行及偏差紀錄");
+  if (/不定期.*檢查|派員.*檢查|接受.*檢查/.test(articleText)) add("指定受檢窗口並備妥許可、品質、運銷及追溯紀錄供主管機關查核");
+  if (/輸入|運輸|運銷|配送|倉儲/.test(articleText) && items.length < 4) {
+    add("以書面界定原廠、許可證所有人、進口代理商與物流商的輸入、倉儲、運輸、交接及偏差責任");
+  }
+  if (!items.length) {
+    add(`由${facts.role || "負責單位"}把本條義務轉成內部SOP、負責人及完成期限`);
+    add("建立可供稽核的證據清單，記錄文件來源、版本、覆核人與保存位置");
+  }
   return items.slice(0, 4);
 }
 
-function buildRoleSummary(articleText, facts) {
+function buildRoleSummary(articleText, facts, lawMeta = {}) {
   const compact = String(articleText || "").replace(/\s+/g, " ").trim();
-  const excerpt = compact.length > 260 ? `${compact.slice(0, 260)}…` : compact;
-  return `對${facts.role || "使用者"}而言，本條直接要求：${excerpt}`;
+  const role = facts.role || "使用者";
+  const reference = SOL_STYLE_SUMMARY_REFERENCES[solStyleReferenceKey(lawMeta)];
+  if (reference) return reference.replaceAll("{role}", role);
+  if (/藥品許可證或有附款許可之所有人/.test(compact) && /來源及流向資料/.test(compact)) {
+    return `若${role}同時是藥品許可證或有附款許可的所有人，本條要求依各許可證／許可字號分別保存製造或輸入、有效成分追蹤及逐批供應流向資料。`;
+  }
+  if (/前條以外從事再生醫療製劑販賣之藥商/.test(compact)) {
+    return `若${role}屬於製劑販賣藥商而非前條許可所有人，本條要求分別保存供應商、進貨批號與日期，以及後續供應對象與交貨紀錄。`;
+  }
+  if (/醫療機構就其使用之再生醫療製劑/.test(compact)) {
+    return `本條義務主體是使用製劑的醫療機構；${role}應配合提供可供醫院依批號保存的供應商、進貨及產品追溯資料。`;
+  }
+  if (/保存至少三十年/.test(compact) || /保存至少十五年/.test(compact)) {
+    return `本條規定不同義務主體的資料保存期限；${role}應先確認自己是許可所有人、販賣藥商或受託物流商，再把相應年限與資料交付責任寫入程序及合約。`;
+  }
+  if (/合適性判定|提供者.*篩選|提供者.*測試/.test(compact)) {
+    return `對${role}而言，本條要求原廠或受託機構以書面程序完成組織／細胞提供者的篩選、測試與合適性判定；代理商應取得可查核的SOP、判定結果及異常通報安排。`;
+  }
+  if (/有效期間|期滿|展延/.test(compact)) {
+    return `對${role}而言，本條的重點是許可效期與展延時程；應建立到期清冊，在法定期限前備妥文件與費用提出申請，並保存審查及核准紀錄。`;
+  }
+  if (/變更.*登記|移轉.*登記|換發|補發/.test(compact)) {
+    return `對${role}而言，本條要求持續維護許可登記事項；名稱、地址、負責人、營業項目或許可權利有變動時，須在法定期限內辦理變更、移轉、換發或補發。`;
+  }
+  if (/委託製造|委託.*檢驗/.test(compact)) {
+    return `對${role}而言，委託製造或檢驗前須完成主管機關核准並確認雙方資格；與原廠或受託廠的品質協議應明定放行、偏差、變更及紀錄保存責任。`;
+  }
+  if (/申請書|申請表|查驗登記|應.*申請/.test(compact)) {
+    return `對${role}而言，本條直接規範申請資格、時點與應備資料；應由單一窗口彙整申請書、證照、技術文件、標籤仿單及費用，逐項覆核後追蹤核准或補件。`;
+  }
+  if (/藥物優良製造準則|優良運銷|GMP|GDP/.test(compact)) {
+    return `對${role}而言，本條要求確認原廠製造品質與輸入後運銷系統均符合核准條件；應保存GMP／GDP證明、冷鏈交接、偏差處理及委外管理紀錄。`;
+  }
+  const clauses = compact.split(/[。；]/).map((item) => item.trim()).filter(Boolean);
+  const relevant = clauses.filter((item) => /應|不得|須|保存|申請|檢附|符合|紀錄/.test(item)).slice(0, 2);
+  const excerpt = (relevant.length ? relevant.join("；") : compact).slice(0, 220);
+  return `對${role}而言，本條要求：${excerpt}${excerpt.length >= 220 ? "…" : ""}`;
 }
 
 function makeArticleBlock({ lawName, pcode, sourceUrl, level, parentLawName = "", parentPcode = "", authorizationArticle = "", article, motherScore, titleScore, facts }) {
@@ -1621,8 +1971,8 @@ function makeArticleBlock({ lawName, pcode, sourceUrl, level, parentLawName = ""
     confidence,
     score: rawScore,
     rank_score: rawScore + confidence,
-    role_summary: buildRoleSummary(article.text, facts),
-    checklist: buildArticleChecklist(article.text, facts),
+    role_summary: buildRoleSummary(article.text, facts, { lawName, pcode, article: article.article }),
+    checklist: buildArticleChecklist(article.text, facts, { lawName, pcode, article: article.article }),
     relation_reason: article.relationReason || "",
   };
 }
@@ -1828,8 +2178,8 @@ function buildFallbackDirectAnswers(facts, applicableLaws) {
 // OpenAI Responses API caller
 // ---------------------------------------------------------------------------
 
-async function callOpenAI({ instructions, input, model }) {
-  const selectedModel = model || OPENAI_MODEL;
+async function callOpenAI({ instructions, input, model, schemaName, jsonSchema, maxOutputTokens }) {
+  const selectedModel = normalizeOpenAIModelId(model, OPENAI_MODEL);
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -1841,6 +2191,19 @@ async function callOpenAI({ instructions, input, model }) {
       instructions,
       input,
       ...(selectedModel.startsWith("gpt-5.6") ? { reasoning: { effort: OPENAI_REASONING_EFFORT } } : { temperature: 0 }),
+      ...(jsonSchema
+        ? {
+            text: {
+              format: {
+                type: "json_schema",
+                name: schemaName || "rxplain_response",
+                strict: true,
+                schema: jsonSchema,
+              },
+            },
+          }
+        : {}),
+      ...(Number.isFinite(maxOutputTokens) ? { max_output_tokens: maxOutputTokens } : {}),
       store: false,
     }),
   });
