@@ -9,7 +9,7 @@
       content="Rxplain：台灣醫藥法規自動化檢索、待辦清單與合規流程圖。"
     />
     <meta name="theme-color" content="#f3f1eb" />
-    <link rel="stylesheet" href="/styles.css?v=20260815v17p3" />
+    <link rel="stylesheet" href="/styles.css?v=20260815v17p4" />
   </head>
   <body>
     <main class="app-shell">
@@ -41,6 +41,14 @@
               <span class="nav-copy"><strong>合規檢查</strong><small>檢查廣告與衛教文案</small></span>
             </button>
           </nav>
+
+          <div class="sidebar-quick-actions">
+            <span class="library-badge"><span aria-hidden="true"></span>法務部法規資料庫</span>
+            <button class="ghost-button" id="loadDemo" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+              載入示範案例
+            </button>
+          </div>
 
           <div class="pipeline-card">
             <div class="sidebar-section-heading">
@@ -74,18 +82,7 @@
 
         <section class="main-panel">
           <header class="topbar">
-            <div class="topbar-copy">
-              <p class="breadcrumb"><span>法規工作區</span><span aria-hidden="true">／</span><strong>台灣</strong></p>
-              <h1 class="product-name">Rxplain</h1>
-              <p class="product-subtitle">把複雜法規轉成可追溯、可執行的合規路徑。</p>
-            </div>
-            <div class="topbar-actions">
-              <span class="library-badge"><span aria-hidden="true"></span>法務部法規資料庫</span>
-              <button class="ghost-button" id="loadDemo" type="button">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
-                載入示範案例
-              </button>
-            </div>
+            <h1 class="product-name">Rxplain</h1>
           </header>
 
           <div id="modeCompliance" class="hidden">
@@ -391,6 +388,6 @@
       </section>
     </main>
 
-    <script src="/app.js?v=20260815v17p3"></script>
+    <script src="/app.js?v=20260815v17p4"></script>
   </body>
 </html>

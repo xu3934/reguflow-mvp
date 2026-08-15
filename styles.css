@@ -1998,6 +1998,63 @@ summary:focus-visible {
   border-left: 1px solid var(--line);
 }
 
+.topbar {
+  justify-content: center;
+  text-align: center;
+}
+
+.topbar .product-name {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.sidebar-quick-actions {
+  display: grid;
+  gap: 8px;
+  margin: 18px 8px 0;
+}
+
+.sidebar-quick-actions .library-badge,
+.sidebar-quick-actions .ghost-button {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.sidebar-quick-actions .library-badge {
+  border-color: rgba(211,231,223,.16);
+  background: rgba(255,255,255,.06);
+  color: #c7d8d2;
+}
+
+.sidebar-quick-actions .ghost-button {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  border-color: rgba(211,231,223,.18);
+  background: rgba(255,255,255,.08);
+  color: #f1f7f4;
+}
+
+.sidebar-quick-actions .ghost-button:hover {
+  background: rgba(255,255,255,.13);
+  box-shadow: none;
+  transform: none;
+}
+
+.sidebar-quick-actions svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.workspace.sidebar-collapsed .sidebar > .sidebar-quick-actions {
+  display: none;
+}
+
 .input-section > .input-label {
   margin-top: 0;
 }
