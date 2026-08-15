@@ -12,6 +12,9 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-sol";
 // smaller model handles them at a fraction of the latency.
 const OPENAI_FAST_MODEL = process.env.OPENAI_FAST_MODEL || "gpt-5.6-sol";
 const OPENAI_EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-large";
+const OPENAI_REASONING_EFFORT = ["none", "low", "medium", "high", "xhigh", "max"].includes(process.env.OPENAI_REASONING_EFFORT)
+  ? process.env.OPENAI_REASONING_EFFORT
+  : "none";
 
 // Scraped statutes and the sub-laws they authorize change on a legislative
 // timescale, so both are cached across requests. Only successful lookups are
@@ -1628,7 +1631,7 @@ async function callOpenAI({ instructions, input, model }) {
       model: selectedModel,
       instructions,
       input,
-      ...(selectedModel.startsWith("gpt-5.6") ? { reasoning: { effort: "max" } } : { temperature: 0 }),
+      ...(selectedModel.startsWith("gpt-5.6") ? { reasoning: { effort: OPENAI_REASONING_EFFORT } } : { temperature: 0 }),
       store: false,
     }),
   });

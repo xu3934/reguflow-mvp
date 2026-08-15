@@ -4,7 +4,7 @@ ReguFlow is an AI-native regulatory retrieval prototype for Taiwan pharma and bi
 
 Live demo:
 
-https://reguflow-mvp.onrender.com/?v=20260815v8
+https://reguflow-mvp.onrender.com/?v=20260815v9
 
 API health check:
 
@@ -26,7 +26,7 @@ ReguFlow is designed to reduce hallucination risk in regulatory search. Instead 
 
 Open the live demo:
 
-https://reguflow-mvp.onrender.com/?v=20260815v8
+https://reguflow-mvp.onrender.com/?v=20260815v9
 
 Then fill in:
 
@@ -100,6 +100,7 @@ OPENAI_API_KEY=your_openai_api_key
 OPENAI_MODEL=gpt-5.6-sol
 OPENAI_FAST_MODEL=gpt-5.6-sol
 OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+OPENAI_REASONING_EFFORT=none
 PORT=3000
 ```
 
@@ -189,6 +190,7 @@ OPENAI_API_KEY=your_openai_api_key
 OPENAI_MODEL=gpt-5.6-sol
 OPENAI_FAST_MODEL=gpt-5.6-sol
 OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+OPENAI_REASONING_EFFORT=none
 ```
 
 Do not commit `.env` or real API keys. The repository intentionally tracks `.env.example` only.
