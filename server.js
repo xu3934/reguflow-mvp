@@ -619,11 +619,17 @@ async function analyzeWithPipeline(payload) {
     const promptCData = resultC.status === "fulfilled" ? resultC.value : null;
     const promptDData = resultD.status === "fulfilled" ? resultD.value : null;
 
-    // Step 3g: Merge AI results with local fallbacks
-    const applicable_laws =
-      promptCData && Array.isArray(promptCData.applicable_laws) && promptCData.applicable_laws.length > 0
-        ? promptCData.applicable_laws
-        : localReport.applicable_laws;
+    // Step 3g: Keep the official Ministry of Justice article blocks as the
+    // canonical UI records. Model output is useful for reasoning, but models
+    // may omit UI fields or combine several article numbers into one record.
+    // The grounded blocks always contain one official article, confidence,
+    // role summary and checklist, so the AWS and fallback paths render alike.
+    const groundedReport = await enrichWithOfficialSubLaws(localReport, facts, assessments);
+    const applicable_laws = mergeAiLawInsights(
+      groundedReport.applicable_laws,
+      promptCData?.applicable_laws,
+      facts
+    );
 
     const summary_and_checklist = normalizeSummary(
       promptCData
@@ -671,6 +677,26 @@ async function analyzeWithPipeline(payload) {
   } catch (err) {
     return { ...localReport, mode: "ai_failed_fallback", aiError: err.message };
   }
+}
+
+function mergeAiLawInsights(groundedLaws, aiLaws, facts) {
+  const aiItems = Array.isArray(aiLaws) ? aiLaws : [];
+  return (Array.isArray(groundedLaws) ? groundedLaws : []).map((law) => {
+    const articleNumber = String(law.article || "").match(/\d+/)?.[0];
+    const ai = aiItems.find((item) => {
+      if (!item || String(item.pcode || "") !== String(law.pcode || "")) return false;
+      if (!articleNumber) return false;
+      return new RegExp(`第\\s*${articleNumber}\\s*條`).test(String(item.article || ""));
+    });
+    return {
+      ...law,
+      role_summary: String(ai?.role_summary || law.role_summary || buildRoleSummary(law.article_text, facts)),
+      checklist: Array.isArray(ai?.checklist) && ai.checklist.length
+        ? ai.checklist.map(String).slice(0, 4)
+        : law.checklist,
+      confidence: Number.isFinite(Number(law.confidence)) ? Number(law.confidence) : 60,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1073,9 +1099,12 @@ ${allLawTexts}${competitorText || ""}
     {
       "law_name": "法規名稱",
       "pcode": "法規代碼",
-      "article": "相關條文",
-      "article_text": "條文內容摘要",
-      "applicability": "likely_applicable | potentially_applicable | needs_more_information"
+      "article": "單一相關條文，例如第6條",
+      "article_text": "該條文內容摘要",
+      "applicability": "likely_applicable | potentially_applicable | needs_more_information",
+      "confidence": 85,
+      "role_summary": "本條對指定角色的具體影響",
+      "checklist": ["本條可執行待辦事項"]
     }
   ],
   "summary_points": ["重點摘要1", "重點摘要2"],
@@ -1087,6 +1116,8 @@ ${allLawTexts}${competitorText || ""}
 }
 
 direct_answers 的規則：請先從使用者的情境描述中辨識出他「實際想問的問題」（可能不只一個，也可能與本模板預設的欄位無關），逐題回答。能用上方法規全文回答的，grounding 標 "law"；能用上方健保署品項資料回答的，標 "nhi_data"；系統提供的資料無法回答的（例如市場規模、未提供的競品細節、商業數據），標 "not_available"，並在 answer 中明確說明無法回答的原因與建議的查詢管道，嚴禁編造數字或品項。
+
+applicable_laws 的規則：每一筆只能放一條法條；不得把「第2條、第3條、第5條」合併在同一筆。相互引用的補充條文也要各自獨立列出。
 
 只輸出 JSON，不要有其他說明。`;
 
