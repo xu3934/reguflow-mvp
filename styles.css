@@ -1993,6 +1993,11 @@ summary:focus-visible {
   box-shadow: none;
 }
 
+.law-source-block,
+.law-brief-block {
+  border-left: 1px solid var(--line);
+}
+
 .input-section > .input-label {
   margin-top: 0;
 }
