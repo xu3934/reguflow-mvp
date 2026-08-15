@@ -67,7 +67,7 @@ Example successful response:
 ```json
 {
   "apiConfigured": true,
-  "model": "gpt-5.6-sol",
+  "model": "gpt-5.6-luna",
   "mode": "openai_ready"
 }
 ```
@@ -97,9 +97,9 @@ Edit `.env`:
 
 ```text
 OPENAI_API_KEY=your_openai_api_key
-OPENAI_MODEL=gpt-5.6-sol
-OPENAI_FAST_MODEL=gpt-5.6-sol
-OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+OPENAI_MODEL=gpt-5.6-luna
+OPENAI_FAST_MODEL=gpt-5.6-luna
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 OPENAI_REASONING_EFFORT=none
 PORT=3000
 ```
@@ -187,9 +187,9 @@ Environment variables:
 
 ```text
 OPENAI_API_KEY=your_openai_api_key
-OPENAI_MODEL=gpt-5.6-sol
-OPENAI_FAST_MODEL=gpt-5.6-sol
-OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+OPENAI_MODEL=gpt-5.6-luna
+OPENAI_FAST_MODEL=gpt-5.6-luna
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 OPENAI_REASONING_EFFORT=none
 ```
 

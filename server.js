@@ -6,12 +6,12 @@ loadDotEnv();
 
 const PORT = Number(process.env.PORT || 3000);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-sol";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 // Prompt A (pick a mother law from a shortlist) and Prompt B (pull authorizing
 // clauses out of a statute) are classification/extraction, not drafting — a
 // smaller model handles them at a fraction of the latency.
-const OPENAI_FAST_MODEL = process.env.OPENAI_FAST_MODEL || "gpt-5.6-sol";
-const OPENAI_EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-large";
+const OPENAI_FAST_MODEL = process.env.OPENAI_FAST_MODEL || "gpt-5.6-luna";
+const OPENAI_EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
 const OPENAI_REASONING_EFFORT = ["none", "low", "medium", "high", "xhigh", "max"].includes(process.env.OPENAI_REASONING_EFFORT)
   ? process.env.OPENAI_REASONING_EFFORT
   : "none";
