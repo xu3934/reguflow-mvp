@@ -855,7 +855,7 @@ function renderNhiCard(metaInfo, items, query, queryMode) {
 async function checkApiHealth() {
   if (location.protocol === "file:") {
     setModeBadge("Local file mode", "local_fallback");
-    apiStatus.textContent = "目前直接開啟 HTML 檔案，不會呼叫後端或 Amazon Bedrock。";
+    apiStatus.textContent = "目前直接開啟 HTML 檔案，不會呼叫後端或 OpenAI API。";
     sidebarStatus.textContent = "Offline - local file";
     return;
   }
@@ -866,11 +866,11 @@ async function checkApiHealth() {
     const health = await response.json();
     if (health.apiConfigured) {
       setModeBadge("AI Pipeline ready", "openai");
-      apiStatus.textContent = `🟢 後端 API Online，Amazon Bedrock 已連線。模型：${health.model}。區域：${health.region || "依伺服器設定"}。管線：${health.pipeline || "A→爬取→B→爬取→C+D"}`;
+      apiStatus.textContent = `🟢 後端 API Online，OpenAI 已連線。模型：${health.model}。管線：${health.pipeline || "A→爬取→B→爬取→C+D"}`;
       sidebarStatus.textContent = "🟢 Backend API Online";
     } else {
       setModeBadge("Local fallback", "local_fallback");
-      apiStatus.textContent = "🟡 後端 API Online，但尚未設定 AWS Bedrock 憑證；使用本地靜態備援，不會產生 AI 費用。";
+      apiStatus.textContent = "🟡 後端 API Online，但尚未設定 OpenAI API Key；使用本地靜態備援，不會產生 AI 費用。";
       sidebarStatus.textContent = "🟡 Backend Online / AI fallback";
     }
   } catch (error) {
@@ -910,7 +910,7 @@ function getModeLabel(mode) {
   return {
     pipeline: "AI Pipeline (法務部即時串接)",
     ai_pipeline: "AI Pipeline (法務部即時串接)",
-    openai: "Amazon Bedrock",
+    openai: "OpenAI API",
     local_fallback: "法務部即時擷取（規則式需求比對）",
     api_failed: "法務部連線失敗",
     api_failed_fallback: "API failed",
