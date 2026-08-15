@@ -790,7 +790,10 @@ function renderLawArticlePair(law, role) {
         <article class="law-report-item law-source-block">
           ${law.relation_reason ? `<p class="relation-reason">${escapeHtml(law.relation_reason)}</p>` : ""}
           <a class="source-link" href="${articleUrl}" target="_blank" rel="noreferrer">法務部 ${escapeHtml(law.article)} 官方來源</a>
-          <p class="article-original"><strong>${escapeHtml(law.article)}</strong> ${escapeHtml(law.article_text)}</p>
+          <div class="article-original">
+            <strong>${escapeHtml(law.article)}</strong>
+            <div class="legal-text">${renderLegalArticleText(law.article_text)}</div>
+          </div>
         </article>
         <article class="law-report-item law-brief-block">
           <p class="section-label">對應重點整理 · ${law.insight_source === "sol" ? "Sol 逐條整理" : "Sol 格式備援"}</p>
@@ -803,6 +806,31 @@ function renderLawArticlePair(law, role) {
         </article>
       </section>
     </section>`;
+}
+
+function renderLegalArticleText(value) {
+  const chineseNumber = "一二三四五六七八九十百千零〇";
+  let text = String(value || "")
+    .replace(/\r/g, "")
+    .replace(/[ \t\f\v]+/g, " ")
+    .replace(/ *\n+ */g, "\n")
+    .trim();
+
+  text = text
+    .replace(new RegExp(`\\s*(?=[${chineseNumber}]+、)`, "g"), "\n")
+    .replace(new RegExp(`\\s*(?=（[${chineseNumber}]+）)`, "g"), "\n")
+    .replace(/\s*(?=（\d+）)/g, "\n")
+    .replace(/。\s+(?=[^\n])/g, "。\n")
+    .replace(/^\n+|\n+$/g, "")
+    .replace(/\n{2,}/g, "\n");
+
+  return text.split("\n").filter(Boolean).map((line) => {
+    let level = "legal-paragraph";
+    if (new RegExp(`^[${chineseNumber}]+、`).test(line)) level = "legal-level-1";
+    else if (new RegExp(`^（[${chineseNumber}]+）`).test(line)) level = "legal-level-2";
+    else if (/^（\d+）/.test(line)) level = "legal-level-3";
+    return `<span class="legal-line ${level}">${escapeHtml(line)}</span>`;
+  }).join("");
 }
 
 function renderStage(stage) {

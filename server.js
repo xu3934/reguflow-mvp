@@ -1648,6 +1648,11 @@ function parseLawHtml(html) {
   // Remove script and style blocks
   let text = html.replace(/<script[\s\S]*?<\/script>/gi, "");
   text = text.replace(/<style[\s\S]*?<\/style>/gi, "");
+  // Preserve the Ministry of Justice page's visible paragraph and table-row
+  // boundaries before stripping markup. These breaks carry the article's
+  // paragraph/item hierarchy and should not be flattened into one sentence.
+  text = text.replace(/<br\s*\/?>/gi, "\n");
+  text = text.replace(/<\/(?:p|div|li|tr|td|th|section|article|h[1-6])\s*>/gi, "\n");
   // Remove all remaining HTML tags
   text = text.replace(/<[^>]+>/g, " ");
   // Decode HTML entities
@@ -1658,8 +1663,8 @@ function parseLawHtml(html) {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
-  // Collapse whitespace into newlines
-  text = text.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  // Collapse horizontal whitespace while retaining semantic line breaks.
+  text = text.replace(/\r/g, "").replace(/[ \t\f\v]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
   // Filter lines to only those with 3+ chars
   const lines = text.split("\n").filter((line) => line.trim().length >= 3);
   const result = lines.join("\n");
@@ -1728,7 +1733,12 @@ function rankAuthorizedSubLaws(items, facts) {
 }
 
 function extractLawArticles(text) {
-  const cleaned = String(text || "").replace(/\s+/g, " ").trim();
+  const cleaned = String(text || "")
+    .replace(/\r/g, "")
+    .replace(/[ \t\f\v]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   const heading = /第\s*\d+(?:\s*之\s*\d+)?\s*條/g;
   const matches = [...cleaned.matchAll(heading)];
   if (!matches.length) return cleaned ? [{ article: "法規內容", text: cleaned.slice(0, 1200) }] : [];

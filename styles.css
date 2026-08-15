@@ -960,7 +960,38 @@ input[type="text"] {
 }
 
 .article-original {
-  white-space: pre-line;
+  margin: 0;
+}
+
+.article-original > strong {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--accent-dark);
+  font-size: 16px;
+}
+
+.legal-text {
+  display: grid;
+  gap: 8px;
+  line-height: 1.75;
+}
+
+.legal-line {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.legal-level-1 {
+  margin-top: 5px;
+  font-weight: 750;
+}
+
+.legal-level-2 {
+  padding-left: 1.5em;
+}
+
+.legal-level-3 {
+  padding-left: 3em;
 }
 
 .relation-reason {
