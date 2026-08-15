@@ -2015,7 +2015,8 @@ summary:focus-visible {
 }
 
 .sidebar-system-card .sidebar-quick-actions {
-  margin: 10px 0 0;
+  gap: 0;
+  margin: 0;
 }
 
 .sidebar-quick-actions .library-badge,
@@ -2053,6 +2054,49 @@ summary:focus-visible {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.8;
+}
+
+.sidebar-utility-panel {
+  overflow: hidden;
+  margin-top: 10px;
+  border: 1px solid rgba(127,208,189,.22);
+  border-radius: 10px;
+  background: rgba(255,255,255,.055);
+}
+
+.sidebar-utility-panel .sidebar-status {
+  margin: 0;
+  padding: 10px 11px;
+  border: 0;
+  border-bottom: 1px solid rgba(211,231,223,.12);
+  border-radius: 0;
+  background: transparent;
+}
+
+.sidebar-utility-panel .library-badge,
+.sidebar-utility-panel .ghost-button {
+  min-height: 40px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.sidebar-utility-panel .library-badge {
+  border-bottom: 1px solid rgba(211,231,223,.12);
+}
+
+.sidebar-utility-panel .ghost-button {
+  border-radius: 0 0 9px 9px;
+}
+
+.sidebar-utility-panel .ghost-button:hover {
+  background: rgba(255,255,255,.08);
+}
+
+.sidebar-system-card + .sidebar-note {
+  margin-top: 12px;
+  padding-top: 12px;
 }
 
 .workspace.sidebar-collapsed .sidebar > .sidebar-quick-actions {
@@ -2805,6 +2849,12 @@ th {
     display: block;
     margin-top: 14px;
     padding: 14px 0 0;
+  }
+
+  .sidebar-note {
+    display: grid;
+    margin-top: 10px;
+    padding: 10px 0 0;
   }
 
   .main-panel {
