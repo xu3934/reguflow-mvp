@@ -994,6 +994,32 @@ input[type="text"] {
   padding-left: 3em;
 }
 
+.key-highlight {
+  margin: 0 -.03em;
+  padding: 0 .08em;
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    transparent 12%,
+    rgba(255, 225, 92, .52) 12%,
+    rgba(255, 225, 92, .52) 88%,
+    transparent 88%
+  );
+  color: inherit;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.law-brief-block .key-highlight {
+  background: linear-gradient(
+    180deg,
+    transparent 12%,
+    rgba(169, 232, 196, .5) 12%,
+    rgba(169, 232, 196, .5) 88%,
+    transparent 88%
+  );
+}
+
 .relation-reason {
   padding: 8px 10px;
   border-radius: 6px;

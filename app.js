@@ -797,11 +797,11 @@ function renderLawArticlePair(law, role) {
         </article>
         <article class="law-report-item law-brief-block">
           <p class="section-label">對應重點整理 · ${law.insight_source === "sol" ? "Sol 逐條整理" : "Sol 格式備援"}</p>
-          <p>${escapeHtml(law.role_summary || "本條尚無可用摘要。")}</p>
+          <p>${highlightImportantText(law.role_summary || "本條尚無可用摘要。", "summary")}</p>
           <p class="section-label checklist-label">本條待辦清單</p>
           <div class="checklist checkbox-list">${(law.checklist || ["請由法規或法務人員複核本條要求。"]).map((item, itemIndex) => {
             const key = `${law.pcode}-${law.article}-${itemIndex}`;
-            return `<label><input type="checkbox" data-check-key="${escapeHtml(key)}" /> <span>${escapeHtml(item)}</span></label>`;
+            return `<label><input type="checkbox" data-check-key="${escapeHtml(key)}" /> <span>${highlightImportantText(item, "summary")}</span></label>`;
           }).join("")}</div>
         </article>
       </section>
@@ -829,8 +829,60 @@ function renderLegalArticleText(value) {
     if (new RegExp(`^[${chineseNumber}]+、`).test(line)) level = "legal-level-1";
     else if (new RegExp(`^（[${chineseNumber}]+）`).test(line)) level = "legal-level-2";
     else if (/^（\d+）/.test(line)) level = "legal-level-3";
-    return `<span class="legal-line ${level}">${escapeHtml(line)}</span>`;
+    return `<span class="legal-line ${level}">${highlightImportantText(line, "legal")}</span>`;
   }).join("");
+}
+
+function highlightImportantText(value, mode = "legal") {
+  const text = String(value || "");
+  if (!text) return "";
+
+  const legalTerms = [
+    "應依", "應於", "應自", "應保存", "應檢附", "應申請", "不得", "禁止", "免為",
+    "藥品許可證", "有附款許可", "查驗登記", "批號", "輸入數量", "生產數量", "報關日期",
+    "製造日期", "有效期間", "保存期限", "組織、細胞追蹤編碼", "供應對象", "聯絡人與電話",
+    "供應數量", "交貨日期", "病人資訊", "書面同意", "冷鏈", "溫度", "追溯", "通報",
+    "至少", "保存", "紀錄", "GMP", "GDP",
+  ];
+  const summaryTerms = [
+    "確認", "取得", "申請", "檢附", "核對", "備妥", "保存", "建立", "記錄", "追溯", "通報",
+    "不得", "必須", "至少", "期限", "批號", "數量", "日期", "藥品許可證", "查驗登記",
+    "冷鏈", "溫度", "GMP", "GDP",
+  ];
+  const terms = mode === "summary" ? summaryTerms : legalTerms;
+  const ranges = [];
+
+  for (const term of [...terms].sort((a, b) => b.length - a.length)) {
+    let start = 0;
+    while (start < text.length) {
+      const index = text.indexOf(term, start);
+      if (index < 0) break;
+      ranges.push([index, index + term.length]);
+      start = index + term.length;
+    }
+  }
+
+  for (const match of text.matchAll(/(?:至少|最少)\s*[一二三四五六七八九十百千零〇\d]+\s*(?:年|月|日|小時)/g)) {
+    ranges.push([match.index, match.index + match[0].length]);
+  }
+
+  if (!ranges.length) return escapeHtml(text);
+  ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  const merged = [];
+  for (const range of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && range[0] <= last[1]) last[1] = Math.max(last[1], range[1]);
+    else merged.push([...range]);
+  }
+
+  let cursor = 0;
+  let html = "";
+  for (const [start, end] of merged) {
+    html += escapeHtml(text.slice(cursor, start));
+    html += `<mark class="key-highlight">${escapeHtml(text.slice(start, end))}</mark>`;
+    cursor = end;
+  }
+  return html + escapeHtml(text.slice(cursor));
 }
 
 function renderStage(stage) {
