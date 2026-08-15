@@ -1,10 +1,10 @@
-# ReguFlow MVP
+# Rxplain
 
-ReguFlow is an AI-native regulatory retrieval prototype for Taiwan pharma and biomedical product workflows. It helps BD, PM, RA, QA, and logistics users turn a product-introduction scenario into a grounded regulatory report, role-specific checklist, and process-flow cards.
+Rxplain is an AI-native regulatory retrieval prototype for Taiwan pharma and biomedical product workflows. It helps BD, PM, RA, QA, and logistics users turn a product-introduction scenario into a grounded regulatory report, role-specific checklist, and process-flow cards.
 
 Live demo:
 
-https://reguflow-mvp.onrender.com/?v=20260815v10
+https://reguflow-mvp.onrender.com/?v=20260815v13
 
 API health check:
 
@@ -12,7 +12,7 @@ https://reguflow-mvp.onrender.com/api/health
 
 ## What It Does
 
-ReguFlow is designed to reduce hallucination risk in regulatory search. Instead of asking an AI model to "remember" applicable laws, the app follows a structured pipeline:
+Rxplain is designed to reduce hallucination risk in regulatory search. Instead of asking an AI model to "remember" applicable laws, the app follows a structured pipeline:
 
 1. Extract legal facts from the user scenario.
 2. Match candidate laws from a curated Taiwan regulatory index.
@@ -26,7 +26,7 @@ ReguFlow is designed to reduce hallucination risk in regulatory search. Instead 
 
 Open the live demo:
 
-https://reguflow-mvp.onrender.com/?v=20260815v10
+https://reguflow-mvp.onrender.com/?v=20260815v13
 
 Then fill in:
 
@@ -68,7 +68,14 @@ Example successful response:
 {
   "apiConfigured": true,
   "model": "gpt-5.6-luna",
-  "mode": "openai_ready"
+  "models": {
+    "applicability": "gpt-5.6-luna",
+    "summary": "gpt-5.6-sol",
+    "flowchart": "gpt-5.6-luna",
+    "answers": "gpt-5.6-luna",
+    "competitors": "gpt-5.6-luna"
+  },
+  "mode": "pipeline_ready"
 }
 ```
 
@@ -99,6 +106,7 @@ Edit `.env`:
 OPENAI_API_KEY=your_openai_api_key
 OPENAI_MODEL=gpt-5.6-luna
 OPENAI_FAST_MODEL=gpt-5.6-luna
+OPENAI_SUMMARY_MODEL=gpt-5.6-sol
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 OPENAI_REASONING_EFFORT=none
 PORT=3000
@@ -189,6 +197,7 @@ Environment variables:
 OPENAI_API_KEY=your_openai_api_key
 OPENAI_MODEL=gpt-5.6-luna
 OPENAI_FAST_MODEL=gpt-5.6-luna
+OPENAI_SUMMARY_MODEL=gpt-5.6-sol
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 OPENAI_REASONING_EFFORT=none
 ```
@@ -200,5 +209,5 @@ Do not commit `.env` or real API keys. The repository intentionally tracks `.env
 - This is a hackathon MVP, not legal advice.
 - The current regulatory index is curated and intentionally small.
 - Official law links are shown for traceability, but production use should add real-time crawling from `law.moj.gov.tw`.
-- AI is used only for role-aware summarization and structured output refinement. Candidate-law retrieval remains deterministic to reduce hallucination risk.
+- Luna 用於適用性與缺漏事實判斷、直接問答、健保競品查詢詞與精簡流程圖；Sol 僅用於摘要與待辦清單。競品品項與價格仍取自健保署資料快照，不由 AI 生成。
 - All outputs should be reviewed by RA or legal professionals before business use.

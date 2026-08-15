@@ -3,23 +3,23 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ReguFlow MVP - 醫藥法規自動化檢索系統</title>
+    <title>Rxplain - 醫藥法規自動化檢索系統</title>
     <meta
       name="description"
-      content="ReguFlow MVP: role-aware Taiwan pharma regulatory retrieval with grounded laws, checklist, and process cards."
+      content="Rxplain：台灣醫藥法規自動化檢索、待辦清單與合規流程圖。"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260815v10" />
+    <link rel="stylesheet" href="/styles.css?v=20260815v13" />
   </head>
   <body>
     <main class="app-shell">
       <section class="workspace">
-        <aside class="sidebar" aria-label="ReguFlow pipeline">
+        <aside class="sidebar" aria-label="Rxplain 法規檢索流程">
           <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-expanded="true" aria-label="收合左側欄">‹</button>
           <div class="brand-block">
-            <div class="brand-mark">R</div>
+            <div class="brand-mark">Rx</div>
             <div>
-              <p class="eyebrow">ReguFlow MVP V2</p>
-              <h1>醫藥法規自動化檢索系統</h1>
+              <p class="eyebrow">法規智慧助理</p>
+              <h1 class="sidebar-tagline">輸入情境，一鍵產出完整法規路徑與合規流程圖</h1>
             </div>
           </div>
 
@@ -31,9 +31,9 @@
               <li data-step="3">法務部下載母法全文</li>
               <li data-step="4">解析授權條文與子法</li>
               <li data-step="5">下載並逐條比對候選子法</li>
-              <li data-step="6">AI 判斷適用性與缺漏事實</li>
-              <li data-step="7">整理摘要、回答與待辦清單</li>
-              <li data-step="8">產出精簡流程圖卡片</li>
+              <li data-step="6">Luna：判斷適用性、問答與競品查詢</li>
+              <li data-step="7">Sol：整理摘要與待辦清單</li>
+              <li data-step="8">Luna：產出精簡流程圖卡片</li>
               <li data-step="9">核對官方來源並排序</li>
               <li data-step="10">完成可追溯報告</li>
             </ol>
@@ -55,8 +55,8 @@
         <section class="main-panel">
           <header class="topbar">
             <div>
-              <p class="eyebrow">法規智慧助理</p>
-              <h2>輸入情境，一鍵產出完整法規路徑與合規流程圖</h2>
+              <p class="eyebrow">醫藥法規自動化檢索系統</p>
+              <h2 class="product-name">Rxplain</h2>
             </div>
             <button class="ghost-button" id="loadDemo" type="button">載入示範案例</button>
           </header>
@@ -343,6 +343,6 @@
       </section>
     </main>
 
-    <script src="/app.js?v=20260815v10"></script>
+    <script src="/app.js?v=20260815v13"></script>
   </body>
 </html>

@@ -110,6 +110,7 @@ select {
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 8px;
   background: #1f6f68;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -132,6 +133,17 @@ h2 {
   font-size: clamp(28px, 4vw, 46px);
   line-height: 1.08;
   letter-spacing: 0;
+}
+
+.product-name {
+  font-size: clamp(42px, 6vw, 64px);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+}
+
+.sidebar-tagline {
+  font-size: 17px;
+  line-height: 1.45;
 }
 
 h3 {

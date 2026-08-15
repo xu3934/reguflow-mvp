@@ -12,6 +12,8 @@ services:
         value: gpt-5.6-luna
       - key: OPENAI_FAST_MODEL
         value: gpt-5.6-luna
+      - key: OPENAI_SUMMARY_MODEL
+        value: gpt-5.6-sol
       - key: OPENAI_EMBEDDING_MODEL
         value: text-embedding-3-small
       - key: OPENAI_REASONING_EFFORT

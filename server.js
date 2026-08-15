@@ -11,6 +11,7 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 // clauses out of a statute) are classification/extraction, not drafting — a
 // smaller model handles them at a fraction of the latency.
 const OPENAI_FAST_MODEL = process.env.OPENAI_FAST_MODEL || "gpt-5.6-luna";
+const OPENAI_SUMMARY_MODEL = process.env.OPENAI_SUMMARY_MODEL || "gpt-5.6-sol";
 const OPENAI_EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
 const OPENAI_REASONING_EFFORT = ["none", "low", "medium", "high", "xhigh", "max"].includes(process.env.OPENAI_REASONING_EFFORT)
   ? process.env.OPENAI_REASONING_EFFORT
@@ -463,8 +464,15 @@ const server = http.createServer(async (req, res) => {
         apiConfigured: Boolean(OPENAI_API_KEY),
         provider: "openai",
         model: OPENAI_API_KEY ? OPENAI_MODEL : null,
+        models: OPENAI_API_KEY ? {
+          applicability: OPENAI_MODEL,
+          summary: OPENAI_SUMMARY_MODEL,
+          flowchart: OPENAI_MODEL,
+          answers: OPENAI_MODEL,
+          competitors: OPENAI_MODEL,
+        } : null,
         mode: OPENAI_API_KEY ? "pipeline_ready" : "local_fallback",
-        pipeline: "A→Scrape→B→Scrape→C+D",
+        pipeline: "A→法務部爬取→B→逐條比對→Luna 適用性／問答／競品／流程圖 ∥ Sol 摘要／待辦",
       });
     }
 
@@ -525,8 +533,12 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`ReguFlow MVP running at http://localhost:${PORT}`);
-  console.log(OPENAI_API_KEY ? `OpenAI enabled with ${OPENAI_MODEL}` : "OpenAI disabled. Using local fallback.");
+  console.log(`Rxplain running at http://localhost:${PORT}`);
+  console.log(
+    OPENAI_API_KEY
+      ? `OpenAI enabled: applicability/answers/competitors/flowchart=${OPENAI_MODEL}, summary/checklist=${OPENAI_SUMMARY_MODEL}`
+      : "OpenAI disabled. Using local fallback."
+  );
   // Build the mother-law vectors now so the first real request doesn't pay for
   // it. Failures are already handled inside (retrieval falls back to the full
   // list), so this is fire-and-forget.
@@ -635,16 +647,59 @@ async function analyzeWithPipeline(payload, onProgress = () => {}) {
       competitorText = `\n\n以下是健保署開放資料「健保用藥品項檔」（快照日期 ${nhiCompetitors.meta.generatedAt}）中查得的同類已收載品項，引用競品給付現況時只能使用下列品項與數字，不得自行補充其他品項或價格：\n${lines.join("\n")}`;
     }
 
-    // Step 3f: Run Prompt C and Prompt D in parallel
-    onProgress(5, "OpenAI 正在判斷法條適用性、缺漏事實與角色影響");
-    const [resultC, resultD] = await Promise.allSettled([
-      runPromptC(allLawTexts, role, scenario, profile, competitorText),
-      runPromptD(allLawTexts, role, scenario, profile),
+    // Step 3f: Run four independent model jobs in parallel. Luna handles
+    // applicability, direct Q&A, competitor-query extraction and the compact
+    // flowchart; Sol is reserved for summaries and article-specific actions.
+    onProgress(5, "平行執行：Luna 適用性、問答、競品與流程圖；Sol 摘要與待辦");
+    const [resultApplicability, resultSummary, resultD, resultAnswers] = await Promise.allSettled([
+      trackAiJob(
+        runPromptApplicability(allLawTexts, role, scenario, profile),
+        "Luna 適用性判斷已完成",
+        "Luna 適用性判斷失敗，將使用本地備援",
+        onProgress
+      ),
+      trackAiJob(
+        runPromptSummary(allLawTexts, role, scenario, profile),
+        "Sol 摘要與待辦已完成",
+        "Sol 摘要失敗，將使用本地備援",
+        onProgress
+      ),
+      trackAiJob(
+        runPromptD(allLawTexts, role, scenario, profile),
+        "Luna 精簡流程圖已完成",
+        "Luna 流程圖失敗，將使用本地備援",
+        onProgress
+      ),
+      trackAiJob(
+        runPromptAnswersAndCompetitor(allLawTexts, role, scenario, profile, competitorText),
+        "Luna 直接問答與競品查詢詞已完成",
+        "Luna 問答與競品查詢失敗，將顯示本地備援",
+        onProgress
+      ),
     ]);
 
-    onProgress(6, "正在整理重點摘要、逐條待辦清單與直接回答");
-    const promptCData = resultC.status === "fulfilled" ? resultC.value : null;
+    onProgress(6, "四項 AI 工作完成，正在合併 Sol 摘要與 Luna 問答、競品及適用性判斷");
+    const applicabilityData = resultApplicability.status === "fulfilled" ? resultApplicability.value : null;
+    const summaryData = resultSummary.status === "fulfilled" ? resultSummary.value : null;
     const promptDData = resultD.status === "fulfilled" ? resultD.value : null;
+    const answersData = resultAnswers.status === "fulfilled" ? resultAnswers.value : null;
+
+    // Prompt A may leave the competitor query empty for broad product
+    // descriptions. The dedicated Luna job gets a second chance to derive an
+    // INN or ATC prefix, while the rows still come from the local NHIA snapshot.
+    const lunaCompetitorQuery = typeof answersData?.competitor_query === "string"
+      ? answersData.competitor_query.trim()
+      : "";
+    if (!nhiCompetitors && lunaCompetitorQuery.length >= 2) {
+      const searchResult = searchNhiDrugs(lunaCompetitorQuery);
+      if (!searchResult.error) {
+        nhiCompetitors = {
+          query: lunaCompetitorQuery,
+          meta: searchResult.meta,
+          items: searchResult.items,
+        };
+      }
+    }
 
     // Step 3g: Keep the official Ministry of Justice article blocks as the
     // canonical UI records. Model output is useful for reasoning, but models
@@ -653,19 +708,23 @@ async function analyzeWithPipeline(payload, onProgress = () => {}) {
     // role summary and checklist, so the OpenAI and fallback paths render alike.
     onProgress(7, "正在產出三階段精簡流程圖卡片");
     const groundedReport = await enrichWithOfficialSubLaws(localReport, facts, assessments);
-    const applicable_laws = mergeAiLawInsights(
+    const judgedLaws = mergeAiApplicability(
       groundedReport.applicable_laws,
-      promptCData?.applicable_laws,
+      applicabilityData?.applicable_laws
+    );
+    const applicable_laws = mergeAiLawInsights(
+      judgedLaws,
+      summaryData?.law_insights,
       facts
     );
 
     const summary_and_checklist = normalizeSummary(
-      promptCData
+      summaryData || applicabilityData
         ? {
-            role: promptCData.role || role,
-            summary_points: promptCData.summary_points,
-            checklist: promptCData.checklist,
-            missing_facts: promptCData.missing_facts,
+            role: summaryData?.role || role,
+            summary_points: summaryData?.summary_points,
+            checklist: summaryData?.checklist,
+            missing_facts: applicabilityData?.missing_facts,
           }
         : null,
       localReport.summary_and_checklist
@@ -676,8 +735,8 @@ async function analyzeWithPipeline(payload, onProgress = () => {}) {
       localReport.process_stages
     );
 
-    const direct_answers = promptCData && Array.isArray(promptCData.direct_answers)
-      ? promptCData.direct_answers
+    const normalizedDirectAnswers = answersData && Array.isArray(answersData.direct_answers)
+      ? answersData.direct_answers
           .filter((a) => a && typeof a === "object" && a.question && a.answer)
           .slice(0, 6)
           .map((a) => ({
@@ -686,11 +745,14 @@ async function analyzeWithPipeline(payload, onProgress = () => {}) {
             grounding: ["law", "nhi_data", "not_available"].includes(a.grounding) ? a.grounding : "not_available",
           }))
       : [];
+    const direct_answers = normalizedDirectAnswers.length
+      ? normalizedDirectAnswers
+      : localReport.direct_answers;
 
     onProgress(8, "正在核對法務部來源並依適用性與信心度排序");
     const completedReport = {
       mode: "pipeline",
-      model: OPENAI_MODEL,
+      model: `${OPENAI_MODEL} + ${OPENAI_SUMMARY_MODEL}`,
       analyzedAt: new Date().toISOString(),
       facts,
       candidates: candidates.slice(0, 7),
@@ -710,15 +772,48 @@ async function analyzeWithPipeline(payload, onProgress = () => {}) {
   }
 }
 
+function findMatchingAiLaw(law, aiItems) {
+  const articleNumber = String(law.article || "").match(/\d+/)?.[0];
+  return aiItems.find((item) => {
+    if (!item || String(item.pcode || "") !== String(law.pcode || "")) return false;
+    if (!articleNumber) return false;
+    return new RegExp(`第\\s*${articleNumber}\\s*條`).test(String(item.article || ""));
+  });
+}
+
+function trackAiJob(promise, successMessage, failureMessage, onProgress) {
+  return promise.then(
+    (value) => {
+      onProgress(5, successMessage);
+      return value;
+    },
+    (error) => {
+      onProgress(5, `${failureMessage}：${error.message}`);
+      throw error;
+    }
+  );
+}
+
+function mergeAiApplicability(groundedLaws, aiLaws) {
+  const aiItems = Array.isArray(aiLaws) ? aiLaws : [];
+  const allowed = ["likely_applicable", "potentially_applicable", "needs_more_information"];
+  return (Array.isArray(groundedLaws) ? groundedLaws : []).map((law) => {
+    const ai = findMatchingAiLaw(law, aiItems);
+    const aiConfidence = Number(ai?.confidence);
+    return {
+      ...law,
+      applicability: allowed.includes(ai?.applicability) ? ai.applicability : law.applicability,
+      confidence: Number.isFinite(aiConfidence) && aiConfidence >= 0 && aiConfidence <= 100
+        ? Math.round(aiConfidence)
+        : law.confidence,
+    };
+  });
+}
+
 function mergeAiLawInsights(groundedLaws, aiLaws, facts) {
   const aiItems = Array.isArray(aiLaws) ? aiLaws : [];
   return (Array.isArray(groundedLaws) ? groundedLaws : []).map((law) => {
-    const articleNumber = String(law.article || "").match(/\d+/)?.[0];
-    const ai = aiItems.find((item) => {
-      if (!item || String(item.pcode || "") !== String(law.pcode || "")) return false;
-      if (!articleNumber) return false;
-      return new RegExp(`第\\s*${articleNumber}\\s*條`).test(String(item.article || ""));
-    });
+    const ai = findMatchingAiLaw(law, aiItems);
     return {
       ...law,
       role_summary: String(ai?.role_summary || law.role_summary || buildRoleSummary(law.article_text, facts)),
@@ -1112,53 +1207,115 @@ ${motherLawText}
 }
 
 // ---------------------------------------------------------------------------
-// Prompt C — applicable laws + summary + checklist + missing facts
+// Prompt C1 (Luna) — applicability and missing facts
 // ---------------------------------------------------------------------------
 
-async function runPromptC(allLawTexts, role, scenario, profile, competitorText) {
+async function runPromptApplicability(allLawTexts, role, scenario, profile) {
   const roleLabel = profile ? `${role}（${profile.label} 視角）` : role;
   const input = `以下是使用者實際描述的情境與需求：
 ${scenario || "（使用者未提供詳細描述）"}
 
 以下是與本案相關的法規全文：
 
-${allLawTexts}${competitorText || ""}
+${allLawTexts}
 
-請根據以上法規內容，並緊扣使用者描述的實際情境與需求，針對角色「${roleLabel}」，輸出以下 JSON 格式的分析結果：
+請只判斷哪些單一法條適用於角色「${roleLabel}」，以及尚缺哪些會改變適用性判斷的事實。輸出：
 {
   "applicable_laws": [
     {
       "law_name": "法規名稱",
       "pcode": "法規代碼",
       "article": "單一相關條文，例如第6條",
-      "article_text": "該條文內容摘要",
       "applicability": "likely_applicable | potentially_applicable | needs_more_information",
-      "confidence": 85,
-      "role_summary": "本條對指定角色的具體影響",
-      "checklist": ["本條可執行待辦事項"]
+      "confidence": 85
     }
   ],
-  "summary_points": ["重點摘要1", "重點摘要2"],
-  "checklist": ["查核項目1", "查核項目2"],
-  "missing_facts": ["尚缺資訊1", "尚缺資訊2"],
-  "direct_answers": [
-    {"question": "使用者實際提出的問題", "answer": "回答內容", "grounding": "law | nhi_data | not_available"}
+  "missing_facts": ["尚缺資訊1", "尚缺資訊2"]
+}
+
+applicable_laws 的規則：每一筆只能放一條法條；不得把「第2條、第3條、第5條」合併在同一筆。相互引用的補充條文也要各自獨立列出。
+只輸出 JSON，不要有其他說明。`;
+
+  const text = await callOpenAI({
+    instructions: "你是台灣生醫法規適用性分析員。只根據提供的法規與情境判斷，不撰寫摘要或待辦。每筆只列一條法條，只輸出 JSON。",
+    input,
+    model: OPENAI_MODEL,
+  });
+
+  return parseJsonObject(text);
+}
+
+// ---------------------------------------------------------------------------
+// Prompt C2 (Sol) — summaries and article-specific actions
+// ---------------------------------------------------------------------------
+
+async function runPromptSummary(allLawTexts, role, scenario, profile) {
+  const roleLabel = profile ? `${role}（${profile.label} 視角）` : role;
+  const input = `使用者情境：
+${scenario || "（使用者未提供詳細描述）"}
+
+法規全文：
+${allLawTexts}
+
+請針對角色「${roleLabel}」輸出：
+{
+  "role": "角色",
+  "summary_points": ["最重要的情境化重點，最多5點"],
+  "checklist": ["跨法規總待辦，最多8點"],
+  "law_insights": [
+    {
+      "pcode": "法規代碼",
+      "article": "單一條文，例如第2條",
+      "role_summary": "本條對角色的具體影響",
+      "checklist": ["直接取自本條義務的具體待辦，最多4點"]
+    }
   ]
 }
 
-direct_answers 的規則：請先從使用者的情境描述中辨識出他「實際想問的問題」（可能不只一個，也可能與本模板預設的欄位無關），逐題回答。能用上方法規全文回答的，grounding 標 "law"；能用上方健保署品項資料回答的，標 "nhi_data"；系統提供的資料無法回答的（例如市場規模、未提供的競品細節、商業數據），標 "not_available"，並在 answer 中明確說明無法回答的原因與建議的查詢管道，嚴禁編造數字或品項。
-
-applicable_laws 的規則：每一筆只能放一條法條；不得把「第2條、第3條、第5條」合併在同一筆。相互引用的補充條文也要各自獨立列出。
-
-只輸出 JSON，不要有其他說明。`;
+law_insights 每筆只能對應一條法條。待辦必須寫出條文中的具體對象、資料欄位、期限、文件或責任，不得只寫「確認符合法規」「建立紀錄」「請法務複核」等通用句。
+只輸出 JSON。`;
 
   const baseInstructions =
-    "你是台灣生醫法規顧問，專為 BD、PM、RA、QA 及物流人員撰寫法規摘要。只根據提供的法規內容作答，不得虛構法條或引用，但摘要與 Checklist 必須針對使用者描述的具體情境客製化，不要只是複述通用法規概要。只輸出 JSON。";
+    "你是台灣生醫法規資深顧問。只根據提供資料，為使用者產生精準、可執行的繁體中文摘要與逐條待辦清單。只輸出 JSON。";
   const text = await callOpenAI({
     instructions: profile ? `${baseInstructions}\n\n職能視角要求：${profile.promptC}` : baseInstructions,
     input,
+    model: OPENAI_SUMMARY_MODEL,
   });
+  return parseJsonObject(text);
+}
 
+// ---------------------------------------------------------------------------
+// Prompt C3 (Luna) — direct answers and competitor-query extraction
+// ---------------------------------------------------------------------------
+
+async function runPromptAnswersAndCompetitor(allLawTexts, role, scenario, profile, competitorText) {
+  const roleLabel = profile ? `${role}（${profile.label} 視角）` : role;
+  const competitorContext = competitorText || "\n\n目前尚未取得競品資料；不得自行虛構品項或價格。";
+  const input = `使用者情境與實際提問：
+${scenario || "（使用者未提供詳細描述）"}
+
+角色：${roleLabel}
+
+法規全文：
+${allLawTexts}${competitorContext}
+
+請輸出：
+{
+  "direct_answers": [
+    {"question": "將使用者的複合問題拆成清楚子問題", "answer": "依據資料直接回答", "grounding": "law | nhi_data | not_available"}
+  ],
+  "competitor_query": "適合查詢健保用藥品項檔的 ATC 前綴或英文主成分 INN；無法判斷才留空"
+}
+
+direct_answers 最多 5 筆，必須涵蓋使用者提出的查驗、品質、供應來源、物流或資料保存問題。能由法規回答標 law；能由提供的健保資料回答標 nhi_data；資料不足標 not_available 並明確說明缺少什麼。
+competitor_query 優先使用具體 INN；未提供成分但明確提及癌症治療時可用 L01。不得虛構競品、價格或法條。只輸出 JSON。`;
+
+  const text = await callOpenAI({
+    instructions: "你是台灣生醫法規問答與健保競品查詢助手。使用繁體中文，只依提供資料直接回答，並產生一個可用的健保查詢詞。只輸出 JSON。",
+    input,
+    model: OPENAI_MODEL,
+  });
   return parseJsonObject(text);
 }
 
@@ -1190,6 +1347,7 @@ ${allLawTexts}
     instructions:
       "你是台灣生醫法規顧問。請根據提供的法規內容規劃 3 個作業階段，嚴格以 JSON 陣列格式輸出，不要有任何其他說明。",
     input,
+    model: OPENAI_MODEL,
   });
 
   const result = parseJsonSafe(text);
@@ -1636,6 +1794,7 @@ function parseJsonSafe(text) {
 }
 
 function buildLocalReport(facts, candidates, assessments) {
+  const applicableLaws = buildApplicableLaws(assessments);
   return {
     mode: "local_fallback",
     model: null,
@@ -1644,11 +1803,25 @@ function buildLocalReport(facts, candidates, assessments) {
     candidates: candidates.slice(0, 7),
     assessments,
     confidence: calculateOverallConfidence(assessments),
-    applicable_laws: buildApplicableLaws(assessments),
+    applicable_laws: applicableLaws,
     summary_and_checklist: buildSummaryChecklist(facts, assessments),
     process_stages: buildProcessStages(facts, assessments),
     traceability: buildTraceability(assessments),
+    direct_answers: buildFallbackDirectAnswers(facts, applicableLaws),
   };
+}
+
+function buildFallbackDirectAnswers(facts, applicableLaws) {
+  const top = (applicableLaws || []).slice(0, 3);
+  if (!top.length) return [];
+  const references = top
+    .map((law) => `${law.law_name || law.title || "相關法規"}${law.article ? ` ${law.article}` : ""}`)
+    .join("、");
+  return [{
+    question: "本案目前可確認的主要法規依據為何？",
+    answer: `依目前提供的${facts.role || "使用者"}情境，優先核對${references}；實際義務仍應依畫面中的法務部正式條文及待補事實逐條確認。`,
+    grounding: "law",
+  }];
 }
 
 // ---------------------------------------------------------------------------

@@ -346,9 +346,9 @@ const pipelineSteps = [
   "法務部下載母法全文",
   "解析授權條文與子法",
   "下載並逐條比對候選子法",
-  "AI 判斷適用性與缺漏事實",
-  "整理摘要、回答與待辦清單",
-  "產出精簡流程圖卡片",
+  "Luna：判斷適用性、問答與競品查詢",
+  "Sol：整理摘要與待辦清單",
+  "Luna：產出精簡流程圖卡片",
   "核對官方來源並排序",
   "完成可追溯報告",
 ];
@@ -830,12 +830,12 @@ async function renderNhiCompetitors(manualQuery, report) {
       if (!response.ok) throw new Error(`NHI query failed: ${response.status}`);
       const data = await response.json();
       if (data.error === "snapshot_missing") {
-        card.classList.add("hidden");
+        renderNhiEmptyState("健保資料快照尚未載入，請稍後重試或使用競品查詢欄。");
         return;
       }
       renderNhiCard(data.meta, data.items, manualQuery, "手動");
     } catch {
-      card.classList.add("hidden");
+      renderNhiEmptyState("競品查詢暫時失敗，請稍後重試或更換英文主成分／ATC 查詢詞。");
     }
     return;
   }
@@ -846,7 +846,15 @@ async function renderNhiCompetitors(manualQuery, report) {
     return;
   }
 
-  card.classList.add("hidden");
+  renderNhiEmptyState("Luna 尚未判斷出可用的英文主成分或 ATC 查詢詞，請在上方競品查詢欄補充。");
+}
+
+function renderNhiEmptyState(message) {
+  const card = document.querySelector("#nhiCard");
+  document.querySelector("#nhiMeta").textContent = "尚未取得結果";
+  document.querySelector("#nhiRows").innerHTML = `<tr><td colspan="6">${escapeHtml(message)}</td></tr>`;
+  document.querySelector("#nhiProvenance").textContent = "競品資料區已保留；取得查詢詞後會以健保署開放資料快照查詢，不由 AI 虛構品項或價格。";
+  card.classList.remove("hidden");
 }
 
 function renderNhiCard(metaInfo, items, query, queryMode) {
@@ -888,7 +896,10 @@ async function checkApiHealth() {
     const health = await response.json();
     if (health.apiConfigured) {
       setModeBadge("AI Pipeline ready", "openai");
-      apiStatus.textContent = `🟢 後端 API Online，OpenAI 已連線。模型：${health.model}。管線：${health.pipeline || "A→爬取→B→爬取→C+D"}`;
+      const modelText = health.models
+        ? `適用性／問答／競品／流程圖：${health.models.applicability}；摘要／待辦：${health.models.summary}`
+        : `模型：${health.model}`;
+      apiStatus.textContent = `🟢 後端 API Online，OpenAI 已連線。${modelText}。管線：${health.pipeline || "A→法務部爬取→混合模型分析"}`;
       sidebarStatus.textContent = "🟢 Backend API Online";
     } else {
       setModeBadge("Local fallback", "local_fallback");
@@ -1093,7 +1104,7 @@ function downloadFlowchartPng(stages) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `ReguFlow-流程圖-${new Date().toISOString().slice(0, 10)}.png`;
+    link.download = `Rxplain-流程圖-${new Date().toISOString().slice(0, 10)}.png`;
     document.body.appendChild(link);
     link.click();
     link.remove();
