@@ -8,23 +8,51 @@
       name="description"
       content="Rxplain：台灣醫藥法規自動化檢索、待辦清單與合規流程圖。"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260815v15" />
+    <meta name="theme-color" content="#f3f1eb" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css?v=20260815v16" />
   </head>
   <body>
     <main class="app-shell">
       <section class="workspace">
         <aside class="sidebar" aria-label="Rxplain 法規檢索流程">
-          <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-expanded="true" aria-label="收合左側欄">‹</button>
+          <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-expanded="true" aria-label="收合左側欄" title="收合側欄（Ctrl+B）">
+            <span aria-hidden="true">‹</span>
+          </button>
           <div class="brand-block">
-            <div class="brand-mark">Rx</div>
-            <div>
-              <p class="eyebrow">法規智慧助理</p>
-              <h1 class="sidebar-tagline">輸入情境，一鍵產出完整法規路徑與合規流程圖</h1>
+            <div class="brand-mark" aria-hidden="true">Rx</div>
+            <div class="brand-copy">
+              <p class="brand-name">Rxplain</p>
+              <p class="brand-description">法規智慧助理</p>
             </div>
           </div>
 
+          <nav class="mode-tabs sidebar-nav" role="tablist" aria-label="工作區">
+            <p class="section-label sidebar-nav-label">工作區</p>
+            <button class="mode-tab active" id="tabRetrieval" type="button" role="tab" aria-selected="true" title="法規檢索">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+              </span>
+              <span class="nav-copy"><strong>法規檢索</strong><small>搜尋法條與子法</small></span>
+            </button>
+            <button class="mode-tab" id="tabCompliance" type="button" role="tab" aria-selected="false" title="合規檢查">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 3 20 7v5c0 5-3.4 8.2-8 9-4.6-.8-8-4-8-9V7l8-4Z"></path><path d="m9 12 2 2 4-4"></path></svg>
+              </span>
+              <span class="nav-copy"><strong>合規檢查</strong><small>檢查廣告與衛教文案</small></span>
+            </button>
+          </nav>
+
           <div class="pipeline-card">
-            <p class="section-label">法規檢索流程</p>
+            <div class="sidebar-section-heading">
+              <p class="section-label">檢索進度</p>
+              <span class="step-count">10 階段</span>
+            </div>
             <ol class="pipeline-list">
               <li data-step="1">解析角色、產品與運輸情境</li>
               <li data-step="2">AI 辨識相關母法</li>
@@ -44,27 +72,27 @@
             <div class="sidebar-status" id="sidebarStatus">檢查中...</div>
           </div>
 
-          <div class="source-card">
-            <p class="section-label">使用指引</p>
-            <p>
-              本系統即時串接法務部全國法規資料庫，確保資訊零幻覺。輸入情境後系統自動完成法規路徑、白話重點與合規流程圖。
-            </p>
+          <div class="source-card sidebar-note">
+            <span class="note-mark" aria-hidden="true">法</span>
+            <p>法條皆附法務部官方來源，摘要與待辦仍應由法規人員複核。</p>
           </div>
         </aside>
 
         <section class="main-panel">
           <header class="topbar">
-            <div>
-              <p class="eyebrow">醫藥法規自動化檢索系統</p>
-              <h2 class="product-name">Rxplain</h2>
+            <div class="topbar-copy">
+              <p class="breadcrumb"><span>法規工作區</span><span aria-hidden="true">／</span><strong>台灣</strong></p>
+              <h1 class="product-name">Rxplain</h1>
+              <p class="product-subtitle">把複雜法規轉成可追溯、可執行的合規路徑。</p>
             </div>
-            <button class="ghost-button" id="loadDemo" type="button">載入示範案例</button>
+            <div class="topbar-actions">
+              <span class="library-badge"><span aria-hidden="true"></span>法務部法規資料庫</span>
+              <button class="ghost-button" id="loadDemo" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+                載入示範案例
+              </button>
+            </div>
           </header>
-
-          <div class="mode-tabs" role="tablist">
-            <button class="mode-tab active" id="tabRetrieval" type="button" role="tab">法規檢索</button>
-            <button class="mode-tab" id="tabCompliance" type="button" role="tab">合規檢查</button>
-          </div>
 
           <div id="modeCompliance" class="hidden">
             <section class="input-section">
@@ -72,6 +100,7 @@
                 <div>
                   <p class="section-label">合規檢查</p>
                   <h3>廣告與衛教文案合規檢查</h3>
+                  <p class="section-description">先辨識法定限制，再標示可能需要修改的文字。</p>
                 </div>
                 <span class="status-pill api-off">送審前自我檢查</span>
               </div>
@@ -178,10 +207,11 @@
           <section class="input-section" aria-labelledby="input-title">
             <div class="section-header">
               <div>
-                <p class="section-label">Request</p>
+                <p class="section-label">法規情境</p>
                 <h3 id="input-title">情境與條件輸入</h3>
+                <p class="section-description">描述產品、角色與活動；條件越完整，適用性排序越準確。</p>
               </div>
-              <span class="status-pill" id="modeBadge">Checking API...</span>
+              <span class="status-pill" id="modeBadge">檢查連線中...</span>
             </div>
 
             <div class="api-status" id="apiStatus">正在檢查後端與 AI API 狀態。</div>
@@ -343,6 +373,6 @@
       </section>
     </main>
 
-    <script src="/app.js?v=20260815v15"></script>
+    <script src="/app.js?v=20260815v16"></script>
   </body>
 </html>

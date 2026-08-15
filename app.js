@@ -901,16 +901,16 @@ async function checkApiHealth() {
         : `模型：${health.model}`;
       const versionText = health.version ? `版本：${health.version}。` : "";
       apiStatus.textContent = `🟢 後端 API Online，OpenAI 已連線。${versionText}${modelText}。管線：${health.pipeline || "A→法務部爬取→混合模型分析"}`;
-      sidebarStatus.textContent = "🟢 Backend API Online";
+      sidebarStatus.textContent = "🟢 後端與 AI 已連線";
     } else {
-      setModeBadge("Local fallback", "local_fallback");
+      setModeBadge("本地備援", "local_fallback");
       apiStatus.textContent = "🟡 後端 API Online，但尚未設定 OpenAI API Key；使用本地靜態備援，不會產生 AI 費用。";
-      sidebarStatus.textContent = "🟡 Backend Online / AI fallback";
+      sidebarStatus.textContent = "🟡 後端已連線／AI 備援";
     }
   } catch (error) {
-    setModeBadge("API server unavailable", "api_failed_fallback");
+    setModeBadge("後端未連線", "api_failed_fallback");
     apiStatus.textContent = `🔴 無法連到後端，會使用本地 fallback。原因: ${error.message}`;
-    sidebarStatus.textContent = "🔴 Backend Offline";
+    sidebarStatus.textContent = "🔴 後端未連線";
   }
 }
 
@@ -971,12 +971,12 @@ function setModeBadge(label, mode) {
 
 function getModeLabel(mode) {
   return {
-    pipeline: "AI Pipeline (法務部即時串接)",
-    ai_pipeline: "AI Pipeline (法務部即時串接)",
-    openai: "OpenAI API",
+    pipeline: "AI 分析管線（法務部即時串接）",
+    ai_pipeline: "AI 分析管線（法務部即時串接）",
+    openai: "OpenAI 已連線",
     local_fallback: "法務部即時擷取（規則式需求比對）",
     api_failed: "法務部連線失敗",
-    api_failed_fallback: "API failed",
+    api_failed_fallback: "後端連線失敗",
     ai_failed_fallback: "AI 失敗－使用法務部擷取結果",
   }[mode] || "法務部即時擷取";
 }
@@ -989,13 +989,30 @@ const exportPdfButton = document.querySelector("#exportPdf");
 const downloadFlowchartButton = document.querySelector("#downloadFlowchart");
 const saveStatus = document.querySelector("#saveStatus");
 const SAVED_REPORT_KEY = "reguflow-saved-report-v1";
+const SIDEBAR_STATE_KEY = "rxplain-sidebar-collapsed";
 let lastRenderedReport = null;
 
-sidebarToggle.addEventListener("click", () => {
-  const collapsed = workspace.classList.toggle("sidebar-collapsed");
-  sidebarToggle.textContent = collapsed ? "›" : "‹";
+function setSidebarCollapsed(collapsed) {
+  workspace.classList.toggle("sidebar-collapsed", collapsed);
+  const toggleGlyph = sidebarToggle.querySelector("span");
+  if (toggleGlyph) toggleGlyph.textContent = collapsed ? "›" : "‹";
   sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
   sidebarToggle.setAttribute("aria-label", collapsed ? "展開左側欄" : "收合左側欄");
+  sidebarToggle.title = `${collapsed ? "展開" : "收合"}側欄（Ctrl+B）`;
+  localStorage.setItem(SIDEBAR_STATE_KEY, collapsed ? "1" : "0");
+}
+
+setSidebarCollapsed(localStorage.getItem(SIDEBAR_STATE_KEY) === "1");
+
+sidebarToggle.addEventListener("click", () => {
+  setSidebarCollapsed(!workspace.classList.contains("sidebar-collapsed"));
+});
+
+document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b") {
+    event.preventDefault();
+    setSidebarCollapsed(!workspace.classList.contains("sidebar-collapsed"));
+  }
 });
 
 saveReportButton.addEventListener("click", () => {
@@ -1161,6 +1178,8 @@ function switchMode(mode) {
   modeRetrieval.classList.toggle("hidden", isCompliance);
   tabCompliance.classList.toggle("active", isCompliance);
   tabRetrieval.classList.toggle("active", !isCompliance);
+  tabCompliance.setAttribute("aria-selected", String(isCompliance));
+  tabRetrieval.setAttribute("aria-selected", String(!isCompliance));
 }
 
 adFile.addEventListener("change", async () => {
